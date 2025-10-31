@@ -441,6 +441,6 @@ if __name__ == "__main__":
     results = run_complete_tr_pipeline_fixed(
         data=compatible_data,
         initial_beta=initial_beta,
-        output_file='facebook_tr_results.pkl'
+        output_file='facebook_tr_results_0.25.pkl'
     )
 

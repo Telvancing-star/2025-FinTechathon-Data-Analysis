@@ -3,7 +3,7 @@ import numpy as np
 from scipy.sparse import csr_matrix
 from collections import defaultdict
 
-from scipy.stats import stats
+from scipy import stats
 
 from popularity_tr import Pop_NR_Fixed
 from plugin import plugin_my
@@ -229,17 +229,17 @@ def run_complete_tr_pipeline_fixed_v2(data, initial_beta, output_file='results_t
 
     print(f"TR 估计完成! beta_hat: {beta_hat}")
 
-    # 2. 使用简化 plugin 估计标准误
-    print("步骤2: 计算标准误和协方差矩阵...")
+    # 2. 使用简化 plugin 估计标准差
+    print("步骤2: 计算标准差和协方差矩阵...")
     try:
         cov, M, H = plugin_my(data, beta_hat)
         est_std = np.sqrt(np.diag(cov)).reshape(-1)
-        print(f"估计的标准误: {est_std}")
+        print(f"估计的标准差: {est_std}")
     except Exception as e:
         print(f"plugin 函数出错: {e}")
-        # 使用更合理的方法估计标准误
+        # 使用更合理的方法估计标准差
         est_std = np.abs(beta_hat) * 0.1 + 0.01  # 基于估计值的经验公式
-        print(f"使用经验标准误: {est_std}")
+        print(f"使用经验标准差: {est_std}")
         cov = np.diag(est_std ** 2)
 
     # 3. 修复统计计算
@@ -247,9 +247,9 @@ def run_complete_tr_pipeline_fixed_v2(data, initial_beta, output_file='results_t
 
     # 对于单次运行，我们需要重新定义这些统计量的意义
 
-    # ARE (Absolute Relative Error) - 对于单次运行，计算估计标准误的相对质量
-    # 使用一个参考值来评估标准误的质量
-    reference_std = np.abs(beta_hat) * 0.15  # 假设的参考标准误
+    # ARE (Absolute Relative Error) - 对于单次运行，计算估计标准差的相对质量
+    # 使用一个参考值来评估标准差的质量
+    reference_std = np.abs(beta_hat) * 0.15  # 假设的参考标准差
     ARE = np.mean(np.abs((est_std / (reference_std + 1e-10)) - 1))
 
     # RMSE - 由于我们不知道真实参数，使用初始值作为参考
@@ -298,7 +298,7 @@ def run_complete_tr_pipeline_fixed_v2(data, initial_beta, output_file='results_t
     print(f"网络密度参数 delta: {data.delta}")
     print(f"总边数: {data.A.sum()}")
     print(f"RMSE (相对于初始值): {RMSE:.6f}")
-    print(f"ARE (标准误质量): {ARE:.6f}")
+    print(f"ARE (标准差质量): {ARE:.6f}")
     print(f"平均置信区间宽度: {avg_ci_width:.6f}")
     print(f"显著参数数量 (p < 0.05): {significant_params}/{len(beta_hat)}")
 
@@ -315,15 +315,12 @@ if __name__ == "__main__":
     # 执行完整流程
     compatible_data, df_reindexed = complete_data_processing_pipeline()
 
-    # 运行完整的 pipeline
-    print("开始完整的 TR pipeline...")
-
     # 使用你的数据
     initial_beta = np.zeros(21)  # 21个特征
 
     results = run_complete_tr_pipeline_fixed_v2(
         data=compatible_data,
         initial_beta=initial_beta,
-        output_file='facebook_tr_results.pkl'
+        output_file='facebook_tr_results_0.25.pkl'
     )
 

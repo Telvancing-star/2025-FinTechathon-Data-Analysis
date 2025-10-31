@@ -1,5 +1,6 @@
 import itertools
 import numpy as np
+import pickle
 
 def compute_M1_block_fixed(exp_block, X_block):
     """
@@ -126,3 +127,28 @@ def plugin_my(data, beta):
 
     cov = np.linalg.inv(H_reg) @ M_reg @ np.linalg.inv(H_reg) / (div * data.N)
     return cov, M, H
+
+
+def load_and_analyze_results(result_file):
+    """加载和分析保存的结果"""
+    with open(result_file, 'rb') as f:
+        results = pickle.load(f)
+
+    print("加载的结果:")
+    if isinstance(results, dict):
+        # 单次运行结果
+        print(f"参数估计: {results['beta_hat']}")
+        print(f"标准差: {results['est_std']}")
+        print(f"RMSE: {results['RMSE']}")
+        print(f"ARE: {results['ARE']}")
+    else:
+        # 多次运行结果
+        print(f"总运行次数: {len(results)}")
+        # 可以进一步分析...
+
+    return results
+
+
+if __name__ == "__main__":
+    # 加载结果
+    results = load_and_analyze_results('facebook_tr_results_0.25.pkl')
