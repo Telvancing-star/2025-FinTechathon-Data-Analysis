@@ -143,6 +143,6 @@ if __name__ == "__main__":
     results = run_complete_tr_pipeline_fixed_v2(
         data=compatible_data,
         beta=beta,
-        output_file='./data/Social/facebook_tr_results_0.5.pkl'
+        output_file='./data/Social/facebook_tr_results.pkl'
     )
 

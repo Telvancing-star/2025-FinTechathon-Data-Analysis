@@ -108,10 +108,10 @@ def run_probability_analysis(data, beta_hat, output_file='probability_analysis.p
     print("开始概率分析...")
 
     # 1. 估计 alpha
+    print("\n1. 估计 alpha...")
     total_edges = data.A.sum()
     C_beta = np.mean(np.exp(data.X @ beta_hat))
-    # alpha_hat = np.log(total_edges * np.sqrt(2) / (data.N * C_beta)) - np.log(data.N - 1)
-    alpha_hat = np.log(total_edges * np.sqrt(2) / (data.N * (data.N - 1) * C_beta))
+    alpha_hat = np.log(total_edges * np.sqrt(2) / (data.N * C_beta)) - np.log(data.N - 1)
     print(f"估计的 alpha: {alpha_hat:.6f}")
 
     # 2. 计算各种概率矩阵
@@ -131,7 +131,7 @@ def run_probability_analysis(data, beta_hat, output_file='probability_analysis.p
     print("\n6. 计算模型拟合优度...")
 
     # 预测的边数
-    predicted_edges = np.sum(P_edge)
+    predicted_edges = np.sum(P_edge) * data.N
     actual_edges = total_edges
     edge_prediction_error = abs(predicted_edges - actual_edges) / actual_edges
 

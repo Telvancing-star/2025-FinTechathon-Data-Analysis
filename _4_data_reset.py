@@ -91,44 +91,73 @@ def load_adjacency_matrix(input_file):
     print(f"加载邻接矩阵: 形状{A.shape}, 边数{A.nnz}")
     return A
 
+# class CompatibleData:
+#     def __init__(self, X, A, in_degrees):
+#         self.X = X
+#         self.N, self.p = X.shape
+#         self.A = A
+#
+#         # 关键修复：确保 in_degrees 是正确形状的 numpy 数组
+#         self.in_degrees = np.asarray(in_degrees).flatten()
+#
+#         # 关键修复：确保 col_prod 是稀疏矩阵
+#         self.col_prod = A.T @ A
+#
+#         # 基于网络密度的经验规则
+#         density = A.sum() / (self.N * (self.N - 1))
+#
+#         print(f"\n基于密度的经验规则:")
+#         if density < 1e-5:  # 极稀疏网络
+#             self.delta = 0
+#             desc = "极稀疏网络"
+#         elif density < 1e-4:  # 很稀疏网络
+#             self.delta = 0.1
+#             desc = "很稀疏网络"
+#         elif density < 1e-3:  # 稀疏网络
+#             self.delta = 0.25
+#             desc = "稀疏网络"
+#         elif density < 0.01:  # 中等稀疏网络
+#             self.delta = 0.5
+#             desc = "中等稀疏网络"
+#         else:  # 相对稠密网络
+#             self.delta = 0.75
+#             desc = "相对稠密网络"
+#
+#         print(f"数据兼容性检查:")
+#         print(f"  X.shape: {self.X.shape}")
+#         print(f"  A.shape: {self.A.shape}")
+#         print(f"  in_degrees.shape: {self.in_degrees.shape}")
+#         print(f"  col_prod.shape: {self.col_prod.shape}")
+#         print(f"  网络密度: {density:.6f} → {desc}")
+#         print(f"  设置 delta = {self.delta}")
+
+# 创建数据对象
 class CompatibleData:
     def __init__(self, X, A, in_degrees):
         self.X = X
         self.N, self.p = X.shape
         self.A = A
-
-        # 关键修复：确保 in_degrees 是正确形状的 numpy 数组
-        self.in_degrees = np.asarray(in_degrees).flatten()
-
-        # 关键修复：确保 col_prod 是稀疏矩阵
+        self.in_degrees = in_degrees
         self.col_prod = A.T @ A
 
-        # 基于网络密度的经验规则
-        density = A.sum() / (self.N * (self.N - 1))
+        # 根据网络密度估算 delta
+        avg_out_degree = A.sum() / self.N
 
-        print(f"\n基于密度的经验规则:")
-        if density < 1e-5:  # 极稀疏网络
-            self.delta = 0
-            desc = "极稀疏网络"
-        elif density < 1e-4:  # 很稀疏网络
-            self.delta = 0.1
-            desc = "很稀疏网络"
-        elif density < 1e-3:  # 稀疏网络
-            self.delta = 0.25
-            desc = "稀疏网络"
-        elif density < 0.01:  # 中等稀疏网络
-            self.delta = 0.5
-            desc = "中等稀疏网络"
-        else:  # 相对稠密网络
-            self.delta = 0.75
-            desc = "相对稠密网络"
+        # 假设 C 在 1-10 范围内（典型值）
+        C_values = [1, 5, 10]
+
+        print(f"\n不同 C 值对应的 delta 估计:")
+        for C in C_values:
+            delta_est = (np.log(avg_out_degree) - np.log(C)) / np.log(self.N)
+            print(f"  C={C}: δ ≈ {delta_est:.4f}")
+
+        self.delta = 0
 
         print(f"数据兼容性检查:")
         print(f"  X.shape: {self.X.shape}")
         print(f"  A.shape: {self.A.shape}")
         print(f"  in_degrees.shape: {self.in_degrees.shape}")
         print(f"  col_prod.shape: {self.col_prod.shape}")
-        print(f"  网络密度: {density:.6f} → {desc}")
         print(f"  设置 delta = {self.delta}")
 
 def create_compatible_data(X, A, in_degrees):
@@ -179,45 +208,6 @@ def complete_data_processing_pipeline():
     compatible_data = create_compatible_data(X, A, in_degrees)
 
     return compatible_data, df
-
-# # 创建数据对象
-# class RealData:
-#     def __init__(self, X, A, in_degrees):
-#         self.X = X
-#         self.N, self.p = X.shape
-#         self.A = A
-#         self.in_degrees = in_degrees
-#         self.col_prod = A.T @ A
-#
-#         # 根据网络密度估算 delta
-#         total_edges = A.sum()
-#         density = total_edges / (self.N * (self.N - 1))
-#         self.delta = _determine_delta(compatible_data)
-#
-#         print(f"设置网络密度参数 delta = {self.delta}")
-#
-#     def _determine_delta(self, data):
-#         """根据论文理论确定 delta"""
-#         N = data.N
-#         avg_out_degree = data.A.sum() / N  # 平均出度
-#
-#         print(f"=== 基于理论的 delta 确定 ===")
-#         print(f"网络大小 N: {N}")
-#         print(f"平均出度: {avg_out_degree:.4f}")
-#         print(f"平均入度: {data.in_degrees.mean():.4f}")
-#
-#         # 根据论文，E(d_i^out) ~ N^δ * C
-#         # 我们可以解出 δ ≈ log(E(d_i^out)) / log(N) - log(C)/log(N)
-#
-#         # 假设 C 在 1-10 范围内（典型值）
-#         C_values = [1, 5, 10]
-#
-#         print(f"\n不同 C 值对应的 delta 估计:")
-#         for C in C_values:
-#             delta_est = (np.log(avg_out_degree) - np.log(C)) / np.log(N)
-#             print(f"  C={C}: δ ≈ {delta_est:.4f}")
-#
-#         return delta_est
 
 
 if __name__ == "__main__":
