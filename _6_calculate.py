@@ -1,38 +1,85 @@
 import numpy as np
+import pandas as pd
 import pickle
-from _4_data_reset import CompatibleData
+from _5_data_reset import CompatibleData
 
-def compute_edge_probability_matrix(data, beta, alpha_hat=None):
-    """
-    计算边存在概率矩阵 P(a_ij=1 | X, Z)
-    根据论文公式(2): P(a_ij=1) = exp(-||Z_i - Z_j||² / (2γ_j²))
 
-    由于Z是潜在变量，我们使用期望值近似
+def create_node_mapping(df_reindexed):
+    """创建节点索引到 local_node_id 的映射"""
+    # 假设 df_reindexed 包含 global_index 和 local_node_id
+    mapping = {}
+
+    for idx, row in df_reindexed.iterrows():
+        global_idx = row['global_index']
+        local_id = row['local_node_id']
+        mapping[global_idx] = local_id
+
+    print(f"创建了 {len(mapping)} 个节点的映射")
+    return mapping
+
+def compute_edge_probability_matrix(data, beta, alpha_hat=None, node_mapping=None):
     """
-    # 计算流行度参数 γ_j = exp(X_j^T β + α)
+    带节点映射的边存在概率计算
+    """
     if alpha_hat is None:
-        # 估计 α (根据网络密度)
         total_edges = data.A.sum()
         C_beta = np.mean(np.exp(data.X @ beta))
         alpha_hat = np.log(total_edges * np.sqrt(2) / (data.N * C_beta)) - np.log(data.N - 1)
 
-    gamma = np.exp(data.X @ beta + alpha_hat)
-
-    # 由于Z是标准正态分布，E[exp(-||Z_i-Z_j||²/(2γ_j²))] = γ_j / sqrt(γ_j² + 2)
-    # 这是论文中推导的期望概率
+    # 计算流行度参数
+    gamma = np.exp(data.X @ beta + alpha_hat)  # (N,)
 
     P_edge = gamma.reshape(1, -1) / np.sqrt(gamma.reshape(1, -1) ** 2 + 2)
-    P_edge = np.tile(P_edge, (data.N, 1))
+    P_edge_matrix = np.tile(P_edge, (data.N, 1))
+    P_edge = P_edge_matrix[0, :]
+    np.fill_diagonal(P_edge_matrix, 0)  # 移除自环概率
 
-    # 移除自环概率
-    np.fill_diagonal(P_edge, 0)
+    # 创建流行度记录
+    popularity_records = {}
+    for global_idx in range(data.N):
+        popularity_records[node_mapping.get(global_idx, f'unknown_{global_idx}')] = gamma[global_idx]
 
-    print(f"边概率矩阵形状: {P_edge.shape}")
-    print(f"平均边概率: {np.mean(P_edge):.6f}")
-    print(f"最大边概率: {np.max(P_edge):.6f}")
-    print(f"最小边概率: {np.min(P_edge):.6f}")
+    print(f"边概率矩阵形状: {P_edge_matrix.shape}")
+    print(f"平均边概率: {np.mean(P_edge_matrix):.6f}")
+    print(f"最大边概率: {np.max(P_edge_matrix):.6f}")
+    print(f"最小边概率: {np.min(P_edge_matrix):.6f}")
 
-    return P_edge, gamma, alpha_hat
+    return P_edge_matrix, P_edge, gamma, alpha_hat, popularity_records
+
+# def compute_edge_probability_matrix(data, beta, alpha_hat=None):
+#     """
+#     计算边存在概率矩阵 P(a_ij=1 | X, Z)
+#     根据论文公式(2): P(a_ij=1) = exp(-||Z_i - Z_j||² / (2γ_j²))
+#
+#     由于Z是潜在变量，我们使用期望值近似
+#     """
+#     # 计算流行度参数 γ_j = exp(X_j^T β + α)
+#     if alpha_hat is None:
+#         # 估计 α (根据网络密度)
+#         total_edges = data.A.sum()
+#         C_beta = np.mean(np.exp(data.X @ beta))
+#         alpha_hat = np.log(total_edges * np.sqrt(2) / (data.N * C_beta)) - np.log(data.N - 1)
+#
+#     gamma_val = np.exp(data.X @ beta + alpha_hat)
+#     gamma = list(zip(index, gamma_val))
+#
+#     # 由于Z是标准正态分布，E[exp(-||Z_i-Z_j||²/(2γ_j²))] = γ_j / sqrt(γ_j² + 2)
+#     # 这是论文中推导的期望概率
+#
+#     P_edge = gamma_val.reshape(1, -1) / np.sqrt(gamma_val.reshape(1, -1) ** 2 + 2)
+#     P_edge_matrix = np.tile(P_edge, (data.N, 1))
+#     P_edge = P_edge_matrix[0, :]
+#     print(f"形状: {P_edge.shape}")
+#
+#     # 移除自环概率
+#     np.fill_diagonal(P_edge_matrix, 0)
+#
+#     print(f"边概率矩阵形状: {P_edge_matrix.shape}")
+#     print(f"平均边概率: {np.mean(P_edge_matrix):.6f}")
+#     print(f"最大边概率: {np.max(P_edge_matrix):.6f}")
+#     print(f"最小边概率: {np.min(P_edge_matrix):.6f}")
+#
+#     return P_edge_matrix, P_edge, gamma, alpha_hat
 
 
 # def compute_reciprocity_probability_matrix(data, beta):
@@ -117,7 +164,9 @@ def run_probability_analysis(data, beta_hat, output_file='probability_analysis.p
 
     # 2. 计算各种概率矩阵
     print("\n2. 计算边存在概率...")
-    P_edge, gamma, alpha_hat = compute_edge_probability_matrix(data, beta_hat, alpha_hat)
+    # P_edge_matrix, P_edge, gamma, alpha_hat = compute_edge_probability_matrix(data, index, beta_hat, alpha_hat)
+    # 使用带映射的版本
+    P_edge_matrix, P_edge, gamma, alpha_hat, popularity_records = compute_edge_probability_matrix(compatible_data, beta_hat, alpha_hat, node_mapping)
 
     # print("\n3. 计算互惠概率...")
     # P_recip = compute_reciprocity_probability_matrix(data, beta_hat)
@@ -132,7 +181,7 @@ def run_probability_analysis(data, beta_hat, output_file='probability_analysis.p
     print("\n6. 计算模型拟合优度...")
 
     # 预测的边数
-    predicted_edges = np.sum(P_edge)
+    predicted_edges = np.sum(P_edge_matrix)
     actual_edges = total_edges
     edge_prediction_error = abs(predicted_edges - actual_edges) / actual_edges
 
@@ -155,6 +204,7 @@ def run_probability_analysis(data, beta_hat, output_file='probability_analysis.p
         'alpha_hat': alpha_hat,
         'gamma': gamma,
         'P_edge': P_edge,
+        'P_edge_matrix': P_edge_matrix,
         # 'P_reciprocity': P_recip,
         # 'P_transitivity': P_trans,
         # 'expected_in_degree': expected_in_degree,
@@ -171,7 +221,8 @@ def run_probability_analysis(data, beta_hat, output_file='probability_analysis.p
             'N': data.N,
             'p': data.p,
             'delta': data.delta
-        }
+        },
+        'popularity_records': popularity_records
     }
 
     with open(output_file, 'wb') as f:
@@ -184,7 +235,7 @@ def run_probability_analysis(data, beta_hat, output_file='probability_analysis.p
     print(f"边数预测: {predicted_edges:.0f} (实际: {actual_edges}, 误差: {edge_prediction_error * 100:.2f}%)")
     # print(f"互惠率预测: {np.mean(P_recip) * 100:.2f}% (实际: {actual_reciprocity_rate * 100:.2f}%)")
     # print(f"平均传递性概率: {np.mean(P_trans) * 100:.2f}%")
-    print(f"流行度参数γ范围: [{np.min(gamma):.4f}, {np.max(gamma):.4f}]")
+    # print(f"流行度参数γ范围: [{np.min(gamma_val):.4f}, {np.max(gamma_val):.4f}]")
 
     return results
 
@@ -196,6 +247,10 @@ if __name__ == "__main__":
 
     with open('./data/Social/beta.pkl', 'rb') as f:  # 注意是'rb'二进制读取模式
         beta = pickle.load(f)
+
+    # 从CSV文件读取数据
+    data = pd.read_csv('./data/Social/compressed_features_expanded.csv')
+    node_mapping = create_node_mapping(data)
 
     # 运行概率分析
     print("运行概率分析 pipeline...")

@@ -173,7 +173,7 @@ def complete_data_processing_pipeline():
 
     # 1. 读取特征数据并重新编号
     print("步骤1: 处理特征数据...")
-    df = pd.read_csv('data/Social/compressed_features.csv')
+    df = pd.read_csv('data/Social/compressed_features_expanded.csv')
     # df, original_to_copies, node_mapping = reindex_nodes_with_duplicates(df)
 
     # 2. 构建特征矩阵

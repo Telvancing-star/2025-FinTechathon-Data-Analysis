@@ -3,7 +3,7 @@ import numpy as np
 from scipy import stats
 from utils.plugin import plugin_my
 import pickle
-from _4_data_reset import CompatibleData
+from _5_data_reset import CompatibleData
 
 
 def debug_pop_nr_internals(estimator, beta):
