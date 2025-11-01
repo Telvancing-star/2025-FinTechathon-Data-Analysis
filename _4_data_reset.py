@@ -4,6 +4,7 @@ import numpy as np
 from scipy.sparse import csr_matrix, save_npz, load_npz
 import pandas as pd
 import matplotlib.pyplot as plt
+import pickle
 
 # 设置中文字体
 plt.rcParams['font.sans-serif'] = ['SimHei']
@@ -90,81 +91,51 @@ def load_adjacency_matrix(input_file):
     print(f"加载邻接矩阵: 形状{A.shape}, 边数{A.nnz}")
     return A
 
-# def build_adjacency_from_expanded_edges(expanded_edges_file, total_nodes):
-#     """
-#     从扩充后的边数据构建邻接矩阵
-#     """
-#     # 读取扩充后的边数据
-#     edges = []
-#     with open(expanded_edges_file, 'r') as f:
-#         for line in f:
-#             if line.strip():
-#                 u, v = map(int, line.strip().split())
-#                 edges.append((u, v))
-#
-#     # 分离源节点和目标节点
-#     sources = [edge[0] for edge in edges]
-#     targets = [edge[1] for edge in edges]
-#
-#     # 构建邻接矩阵
-#     A = csr_matrix((np.ones(len(sources)), (sources, targets)),
-#                    shape=(total_nodes, total_nodes))
-#
-#     # 移除自环
-#     A.setdiag(0)
-#     A.eliminate_zeros()
-#
-#     print(f"邻接矩阵形状: {A.shape}")
-#     print(f"网络边数: {A.nnz}")
-#     print(f"网络密度: {A.nnz / (total_nodes * (total_nodes - 1)):.6f}")
-#
-#     return A
+class CompatibleData:
+    def __init__(self, X, A, in_degrees):
+        self.X = X
+        self.N, self.p = X.shape
+        self.A = A
+
+        # 关键修复：确保 in_degrees 是正确形状的 numpy 数组
+        self.in_degrees = np.asarray(in_degrees).flatten()
+
+        # 关键修复：确保 col_prod 是稀疏矩阵
+        self.col_prod = A.T @ A
+
+        # 基于网络密度的经验规则
+        density = A.sum() / (self.N * (self.N - 1))
+
+        print(f"\n基于密度的经验规则:")
+        if density < 1e-5:  # 极稀疏网络
+            self.delta = 0
+            desc = "极稀疏网络"
+        elif density < 1e-4:  # 很稀疏网络
+            self.delta = 0.1
+            desc = "很稀疏网络"
+        elif density < 1e-3:  # 稀疏网络
+            self.delta = 0.25
+            desc = "稀疏网络"
+        elif density < 0.01:  # 中等稀疏网络
+            self.delta = 0.5
+            desc = "中等稀疏网络"
+        else:  # 相对稠密网络
+            self.delta = 0.75
+            desc = "相对稠密网络"
+
+        print(f"数据兼容性检查:")
+        print(f"  X.shape: {self.X.shape}")
+        print(f"  A.shape: {self.A.shape}")
+        print(f"  in_degrees.shape: {self.in_degrees.shape}")
+        print(f"  col_prod.shape: {self.col_prod.shape}")
+        print(f"  网络密度: {density:.6f} → {desc}")
+        print(f"  设置 delta = {self.delta}")
 
 def create_compatible_data(X, A, in_degrees):
     """
     创建与 Pop_NR 类兼容的数据对象
     关键修复：确保所有维度匹配
     """
-
-    class CompatibleData:
-        def __init__(self, X, A, in_degrees):
-            self.X = X
-            self.N, self.p = X.shape
-            self.A = A
-
-            # 关键修复：确保 in_degrees 是正确形状的 numpy 数组
-            self.in_degrees = np.asarray(in_degrees).flatten()
-
-            # 关键修复：确保 col_prod 是稀疏矩阵
-            self.col_prod = A.T @ A
-
-            # 基于网络密度的经验规则
-            density = A.sum() / (self.N * (self.N - 1))
-
-            print(f"\n基于密度的经验规则:")
-            if density < 1e-5:  # 极稀疏网络
-                self.delta = 0
-                desc = "极稀疏网络"
-            elif density < 1e-4:  # 很稀疏网络
-                self.delta = 0.1
-                desc = "很稀疏网络"
-            elif density < 1e-3:  # 稀疏网络
-                self.delta = 0.25
-                desc = "稀疏网络"
-            elif density < 0.01:  # 中等稀疏网络
-                self.delta = 0.5
-                desc = "中等稀疏网络"
-            else:  # 相对稠密网络
-                self.delta = 0.75
-                desc = "相对稠密网络"
-
-            print(f"数据兼容性检查:")
-            print(f"  X.shape: {self.X.shape}")
-            print(f"  A.shape: {self.A.shape}")
-            print(f"  in_degrees.shape: {self.in_degrees.shape}")
-            print(f"  col_prod.shape: {self.col_prod.shape}")
-            print(f"  网络密度: {density:.6f} → {desc}")
-            print(f"  设置 delta = {self.delta}")
 
     return CompatibleData(X, A, in_degrees)
 
@@ -253,13 +224,14 @@ if __name__ == "__main__":
     # 执行完整流程
     compatible_data, df = complete_data_processing_pipeline()
 
-    # # 创建数据对象
-    # real_data = RealData(X, A, in_degrees)
+    # 将对象保存为pkl文件
+    with open('./data/Social/compatible_data.pkl', 'wb') as f:  # 注意是'wb'二进制写入模式
+        pickle.dump(compatible_data, f)
 
     # 在运行估计器之前添加维度检查
     print("数据维度检查:")
-    print(f"X.shape: {compatible_data.X.shape}")  # 应该是 (4171, 22)
-    print(f"A.shape: {compatible_data.A.shape}")  # 应该是 (4171, 4167)
+    print(f"X.shape: {compatible_data.X.shape}")  # 应该是 (4171, 21)
+    print(f"A.shape: {compatible_data.A.shape}")  # 应该是 (4171, 4171)
     print(f"in_degrees.shape: {compatible_data.in_degrees.shape}")  # 应该是 (4171,)
     print(f"col_prod.shape: {compatible_data.col_prod.shape}")  # 应该是 (4171, 4171)
 
@@ -268,6 +240,15 @@ if __name__ == "__main__":
     tr_estimator = Pop_NR_Fixed(compatible_data)
     initial_beta = np.zeros(21)  # 21个特征（不包括截距）
     beta_hat = tr_estimator.run(running_parameter=initial_beta, max_iter=50)
+
+    beta = {
+        "initial_beta": initial_beta,
+        "beta_hat": beta_hat,
+    }
+
+    # 将对象保存为pkl文件
+    with open('./data/Social/beta.pkl', 'wb') as f:  # 注意是'wb'二进制写入模式
+        pickle.dump(beta, f)
 
     print("估计完成!")
     print(f"参数估计结果: {beta_hat.reshape(-1)}")
