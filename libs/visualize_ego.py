@@ -292,7 +292,7 @@ def main():
     """
     主函数 - 处理多个ego网络
     """
-    data_dir = "./data"  # 数据文件所在目录
+    data_dir = "../data/Social"  # 数据文件所在目录
     ego_nodes = [0, 107, 348, 414, 686, 698, 1684, 1912, 3437, 3980]  # 示例ego节点ID
 
     # 创建输出目录
@@ -359,7 +359,7 @@ def main():
         df_stats.to_csv('./visualize/ego_network_statistics.csv', index=False)
         print(f"\n统计信息已保存至: ./visualize/ego_network_statistics.csv")
 
-    print(f"\n所有可视化结果已保存至 ./visualize/ 目录")
+    print(f"\n所有可视化结果已保存至 ./visualize")
 
 
 if __name__ == "__main__":

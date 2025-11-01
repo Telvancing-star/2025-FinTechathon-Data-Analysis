@@ -2,8 +2,8 @@ import pandas as pd
 import numpy as np
 from scipy.sparse import csr_matrix
 from collections import defaultdict
-from popularity_tr import Pop_NR_Fixed
-from plugin import plugin_my
+from utils.popularity_tr import Pop_NR_Fixed
+from utils.plugin import plugin_my
 import pickle
 from tqdm import tqdm
 

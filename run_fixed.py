@@ -2,13 +2,11 @@ import pandas as pd
 import numpy as np
 from scipy.sparse import csr_matrix
 from collections import defaultdict
-
 from scipy import stats
-
-from popularity_tr import Pop_NR_Fixed
-from plugin import plugin_my
+from utils.popularity_tr import Pop_NR_Fixed
+from utils.plugin import plugin_my
 import pickle
-from tqdm import tqdm
+import tqdm
 
 
 def reindex_nodes_with_duplicates(df):
@@ -154,7 +152,7 @@ def complete_data_processing_pipeline():
     """完整的数据处理流程"""
 
     print("步骤1: 处理特征数据...")
-    df = pd.read_csv('data/compressed_features.csv')
+    df = pd.read_csv('data/Social/compressed_features.csv')
     df_reindexed, original_to_copies, node_mapping = reindex_nodes_with_duplicates(df)
 
     print("\n步骤2: 构建特征矩阵...")

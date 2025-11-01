@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 from scipy.sparse import csr_matrix
 import os
 
@@ -104,7 +105,7 @@ class EgoFeatureProcessor:
         return node_ids, X_compressed
 
     def get_all_features(self):
-        """获取所有ego-network的压缩特征矩阵"""
+        """获取所有ego-network的压缩特征矩阵，并添加缺失的节点"""
         all_X = []
         all_node_info = []  # 保存节点信息 (ego_id, local_node_id, global_index)
 
@@ -140,7 +141,55 @@ class EgoFeatureProcessor:
         # 合并所有特征矩阵
         X_combined = np.vstack(all_X)
 
+        # 添加四个缺失的节点
+        X_combined, all_node_info = self._add_missing_nodes(X_combined, all_node_info, global_idx)
+
         return X_combined, all_node_info
+
+    def _add_missing_nodes(self, X_combined, all_node_info, start_global_idx):
+        """
+        添加四个缺失的节点到特征矩阵和节点信息中
+
+        参数:
+        X_combined: 当前的特征矩阵
+        all_node_info: 当前的节点信息列表
+        start_global_idx: 下一个可用的global_index
+
+        返回:
+        更新后的X_combined和all_node_info
+        """
+        print("Adding missing nodes...")
+
+        # 缺失的节点信息
+        missing_nodes = [
+            {'local_node_id': 686, 'ego_id': -1},
+            {'local_node_id': 1912, 'ego_id': -1},
+            {'local_node_id': 3437, 'ego_id': -1},
+            {'local_node_id': 3980, 'ego_id': -1}
+        ]
+
+        # 获取特征向量的维度
+        num_features = X_combined.shape[1]
+
+        # 创建缺失节点的特征向量 (feature_0=1, 其他特征=0)
+        missing_features = np.zeros((4, num_features))
+        missing_features[:, 0] = 1  # 设置feature_0为1
+
+        # 添加节点信息
+        for i, node_info in enumerate(missing_nodes):
+            all_node_info.append({
+                'ego_id': node_info['ego_id'],
+                'local_node_id': node_info['local_node_id'],
+                'global_index': start_global_idx + i
+            })
+
+        # 合并特征矩阵
+        X_combined_with_missing = np.vstack([X_combined, missing_features])
+
+        print(
+            f"Added {len(missing_nodes)} missing nodes with global indices {start_global_idx}-{start_global_idx + len(missing_nodes) - 1}")
+
+        return X_combined_with_missing, all_node_info
 
     def get_feature_description(self):
         """返回特征维度的描述"""
@@ -188,7 +237,7 @@ class EgoFeatureProcessor:
 def main():
     # 你的ego节点列表
     ego_nodes = [0, 107, 348, 414, 686, 698, 1684, 1912, 3437, 3980]
-    data_path = "./data"  # 替换为实际路径
+    data_path = "./data/Social"  # 替换为实际路径
 
     # 创建处理器
     processor = EgoFeatureProcessor(ego_nodes, data_path)
@@ -209,7 +258,7 @@ def main():
         info = node_info[i]
         print(f"  全局索引 {info['global_index']}: ego={info['ego_id']}, 本地节点={info['local_node_id']}")
 
-    csv_output_path = "data/compressed_features.csv"
+    csv_output_path = "data/Social/compressed_features.csv"
     processor.save_features_to_csv(X, node_info, feature_desc, csv_output_path)
 
     # 现在X可以用于PoRe-LSM模型
