@@ -1,0 +1,2 @@
+total_nodes,total_edges,network_density,average_degree,average_clustering,connected_components,processed_ego_networks
+3963,88156,0.011229058085626218,44.48952813525107,0.6171931380004954,1,10
