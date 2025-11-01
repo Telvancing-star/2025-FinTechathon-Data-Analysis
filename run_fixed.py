@@ -148,35 +148,6 @@ def create_compatible_data(X, A, in_degrees):
     return CompatibleData(X, A, in_degrees)
 
 
-def complete_data_processing_pipeline():
-    """完整的数据处理流程"""
-
-    print("步骤1: 处理特征数据...")
-    df = pd.read_csv('data/Social/compressed_features.csv')
-    df_reindexed, original_to_copies, node_mapping = reindex_nodes_with_duplicates(df)
-
-    print("\n步骤2: 构建特征矩阵...")
-    feature_cols = [f'feature_{i}' for i in range(1,22)]
-    X = df_reindexed[feature_cols].values
-    print(f"特征矩阵形状: {X.shape}")
-
-    print("\n步骤3: 扩充边数据...")
-    original_edges_file = 'data/facebook_combined.txt'
-    expanded_edges_file = 'data/facebook_combined_expanded.txt'
-    expanded_edges = expand_edges_with_copies(original_edges_file, original_to_copies, expanded_edges_file)
-
-    print("\n步骤4: 构建邻接矩阵...")
-    total_nodes = len(df_reindexed)
-    A = build_adjacency_from_expanded_edges(expanded_edges_file, total_nodes)
-
-    print("\n步骤5: 计算入度并创建兼容数据...")
-    in_degrees = np.array(A.sum(axis=0)).flatten()
-
-    # 关键：创建兼容的数据对象
-    compatible_data = create_compatible_data(X, A, in_degrees)
-
-    return compatible_data, df_reindexed
-
 def debug_pop_nr_internals(estimator, beta):
     """调试 Pop_NR 内部矩阵操作"""
     print("\n=== 调试 Pop_NR 内部操作 ===")

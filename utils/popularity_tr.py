@@ -150,14 +150,28 @@ class Pop_NR_Fixed:
             # 返回一些默认值以便继续运行
             return 1.0, np.zeros((self.p, 1)), np.eye(self.p)
 
-    def run(self, running_parameter, alpha=1, max_iter=20, epsilon=1e-4):
+    def run(self, running_parameter, alpha=1, max_iter=20, epsilon=1e-6):
         running_parameter = np.array(running_parameter).reshape(-1, 1)
         it = 0
         L_old = None
+
+        # 记录收敛历史
+        loss_history = []
+
         while it < max_iter:
             print(f"\n迭代 {it + 1}:")
             L, g, h = self.loss_grad_hessian(running_parameter)
-            print(f"  损失: {L:.6f}, 梯度范数: {np.linalg.norm(g):.6f}")
+            loss_history.append(L)
+
+            # 计算条件数（处理奇异矩阵）
+            try:
+                cond_number = np.linalg.cond(h)
+                print(f"  损失: {L:.6f}, 梯度范数: {np.linalg.norm(g):.6f}")
+                print(f"  海森矩阵条件数: {cond_number:.2e}")
+            except (np.linalg.LinAlgError, ValueError):
+                print(f"  损失: {L:.6f}, 梯度范数: {np.linalg.norm(g):.6f}")
+                print(f"  海森矩阵条件数: inf (奇异矩阵)")
+                cond_number = np.inf
 
             if L_old is not None:
                 err = abs(L_old - L) / (abs(L) + 1e-10)
@@ -165,21 +179,59 @@ class Pop_NR_Fixed:
                 if err < epsilon:
                     print("收敛!")
                     break
+
             L_old = L
 
-            try:
-                update = alpha * np.linalg.inv(h) @ g
-                running_parameter = running_parameter - update.reshape(-1, 1)
-                print(f"  参数更新范数: {np.linalg.norm(update):.6f}")
-            except Exception as e:
-                print(f"  更新参数时出错: {e}")
-                # 使用梯度下降作为备选
-                update = alpha * g / (np.linalg.norm(g) + 1e-10)
-                running_parameter = running_parameter - update
+            # 处理海森矩阵求逆
+            if cond_number > 1e12 or not np.isfinite(cond_number):
+                print("  海森矩阵接近奇异，使用强正则化")
+                reg_strength = 1e-3 * np.eye(h.shape[0])  # 更强的正则化
+                h_safe = h + reg_strength
+                try:
+                    update = alpha * np.linalg.inv(h_safe) @ g
+                except:
+                    print("  正则化求逆失败，使用梯度下降")
+                    update = alpha * g / (np.linalg.norm(g) + 1e-10)
+            else:
+                try:
+                    update = alpha * np.linalg.inv(h) @ g
+                except np.linalg.LinAlgError:
+                    print("  海森矩阵求逆失败，使用正则化")
+                    reg_strength = 1e-6 * np.trace(h) / h.shape[0] * np.eye(h.shape[0])
+                    h_reg = h + reg_strength
+                    update = alpha * np.linalg.inv(h_reg) @ g
+
+            # 检查更新是否合理
+            update_norm = np.linalg.norm(update)
+            if update_norm > 10:  # 更新步长太大
+                print(f"  更新步长过大 ({update_norm:.2f})，进行裁剪")
+                update = update / update_norm * 2  # 限制最大步长为2
+
+            running_parameter = running_parameter - update
+            print(f"  参数更新范数: {np.linalg.norm(update):.6f}")
 
             it += 1
 
+        # 绘制损失历史
+        self.plot_loss_history(loss_history)
+
         return running_parameter
+
+    def plot_loss_history(self, loss_history):
+        """绘制损失函数收敛历史"""
+        try:
+            import matplotlib.pyplot as plt
+            plt.figure(figsize=(10, 6))
+            plt.plot(loss_history, 'b-o', linewidth=2, markersize=4)
+            plt.xlabel('迭代次数')
+            plt.ylabel('损失函数值')
+            plt.title('TR估计器收敛历史')
+            plt.grid(True, alpha=0.3)
+            plt.savefig('tr_convergence_history.png', dpi=300, bbox_inches='tight')
+            plt.close()
+            print("收敛历史图已保存为 'tr_convergence_history.png'")
+        except ImportError:
+            print("无法绘制收敛历史 (matplotlib 未安装)")
 
 # In[7]:
 

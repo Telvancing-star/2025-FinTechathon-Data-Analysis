@@ -3,6 +3,11 @@ from utils.popularity_tr import Pop_NR_Fixed
 import numpy as np
 from scipy.sparse import csr_matrix, save_npz, load_npz
 import pandas as pd
+import matplotlib.pyplot as plt
+
+# 设置中文字体
+plt.rcParams['font.sans-serif'] = ['SimHei']
+plt.rcParams['axes.unicode_minus'] = False
 
 
 def build_adjacency_from_csv(adjacency_csv_file, total_nodes=None):
@@ -173,7 +178,7 @@ def complete_data_processing_pipeline():
 
     # 2. 构建特征矩阵
     print("\n步骤2: 构建特征矩阵...")
-    feature_cols = [f'feature_{i}' for i in range(22)]
+    feature_cols = [f'feature_{i}' for i in range(1, 22)]
     X = df[feature_cols].values
     print(f"特征矩阵形状: {X.shape}")
 
@@ -261,7 +266,7 @@ if __name__ == "__main__":
     # 运行 TR 估计器
     print("\n步骤6: 运行 TR 估计器...")
     tr_estimator = Pop_NR_Fixed(compatible_data)
-    initial_beta = np.zeros(22)  # 22个特征（包括截距）
+    initial_beta = np.zeros(21)  # 21个特征（不包括截距）
     beta_hat = tr_estimator.run(running_parameter=initial_beta, max_iter=50)
 
     print("估计完成!")
