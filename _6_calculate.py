@@ -4,20 +4,7 @@ import pickle
 from _5_data_reset import CompatibleData
 
 
-def create_node_mapping(df_reindexed):
-    """创建节点索引到 local_node_id 的映射"""
-    # 假设 df_reindexed 包含 global_index 和 local_node_id
-    mapping = {}
-
-    for idx, row in df_reindexed.iterrows():
-        global_idx = row['global_index']
-        local_id = row['local_node_id']
-        mapping[global_idx] = local_id
-
-    print(f"创建了 {len(mapping)} 个节点的映射")
-    return mapping
-
-def compute_edge_probability_matrix(data, beta, alpha_hat=None, node_mapping=None):
+def compute_edge_probability_matrix(data, beta, alpha_hat=None):
     """
     带节点映射的边存在概率计算
     """
@@ -35,9 +22,12 @@ def compute_edge_probability_matrix(data, beta, alpha_hat=None, node_mapping=Non
     np.fill_diagonal(P_edge_matrix, 0)  # 移除自环概率
 
     # 创建流行度记录
+    # 从CSV文件读取数据
+    data = pd.read_csv('./data/Social/compressed_features_expanded.csv')
+    df_sorted = data.sort_values('local_node_id')
     popularity_records = {}
-    for global_idx in range(data.N):
-        popularity_records[node_mapping.get(global_idx, f'unknown_{global_idx}')] = gamma[global_idx]
+    for idx, local_node_id in enumerate(df_sorted['local_node_id']):
+        popularity_records[local_node_id] = gamma[idx]
 
     print(f"边概率矩阵形状: {P_edge_matrix.shape}")
     print(f"平均边概率: {np.mean(P_edge_matrix):.6f}")
@@ -166,7 +156,7 @@ def run_probability_analysis(data, beta_hat, output_file='probability_analysis.p
     print("\n2. 计算边存在概率...")
     # P_edge_matrix, P_edge, gamma, alpha_hat = compute_edge_probability_matrix(data, index, beta_hat, alpha_hat)
     # 使用带映射的版本
-    P_edge_matrix, P_edge, gamma, alpha_hat, popularity_records = compute_edge_probability_matrix(compatible_data, beta_hat, alpha_hat, node_mapping)
+    P_edge_matrix, P_edge, gamma, alpha_hat, popularity_records = compute_edge_probability_matrix(compatible_data, beta_hat, alpha_hat)
 
     # print("\n3. 计算互惠概率...")
     # P_recip = compute_reciprocity_probability_matrix(data, beta_hat)
@@ -247,10 +237,6 @@ if __name__ == "__main__":
 
     with open('./data/Social/beta.pkl', 'rb') as f:  # 注意是'rb'二进制读取模式
         beta = pickle.load(f)
-
-    # 从CSV文件读取数据
-    data = pd.read_csv('./data/Social/compressed_features_expanded.csv')
-    node_mapping = create_node_mapping(data)
 
     # 运行概率分析
     print("运行概率分析 pipeline...")

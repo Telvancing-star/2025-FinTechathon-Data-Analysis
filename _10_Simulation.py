@@ -52,7 +52,7 @@ class Diffusion:
         for _, row in records.iterrows():
             node_id = row['对应的local_node_id']
             investment = row['Denominations']
-            G.add_node(node_id, investment=investment)
+            G.add_node(node_id)
             node_investments[node_id] = investment
 
         # 添加边（传播关系）
@@ -62,21 +62,14 @@ class Diffusion:
         for new_inv in new_investments:
             new_node = new_inv['对应的local_node_id']
             # 找到影响这个新投资者的传播者
-            spread_nodes = [node for node in self.neighbor[new_node]
-                            if node in G.nodes and node in records['对应的local_node_id'].values]
-            if spread_nodes:
-                # 随机选择一个传播者（模拟实际传播路径）
-                source_node = np.random.choice(spread_nodes)
-                G.add_edge(source_node, new_node)
-                edge_data.append((source_node, new_node, 'new'))
-
-        # 对于之前的投资者，也添加传播关系（基于邻居关系）
-        for node in G.nodes():
-            if node in self.neighbor:
-                for neighbor_node in self.neighbor[node]:
-                    if neighbor_node in G.nodes and not G.has_edge(node, neighbor_node):
-                        # 只添加可能存在的传播关系
-                        G.add_edge(node, neighbor_node, style='potential')
+            if new_node in self.neighbor:
+                spread_nodes = [node for node in self.neighbor[new_node]
+                                if node in G.nodes]
+                if spread_nodes:
+                    # 随机选择一个传播者
+                    source_node = np.random.choice(spread_nodes)
+                    G.add_edge(source_node, new_node)
+                    edge_data.append((source_node, new_node, 'new'))
 
         return G, node_investments, edge_data
 
@@ -87,50 +80,57 @@ class Diffusion:
         # 设置布局
         pos = nx.spring_layout(G, k=1, iterations=50)
 
-        # 准备节点颜色（根据投资金额）
-        investments = list(node_investments.values())
-        if investments:
-            min_inv, max_inv = min(investments), max(investments)
-            if min_inv == max_inv:
-                node_colors = ['lightblue'] * len(G.nodes())
+        # 准备节点颜色（根据投资金额）- 确保顺序与G.nodes()一致
+        node_colors = []
+        for node in G.nodes():
+            if node in node_investments:
+                node_colors.append(node_investments[node])
             else:
-                node_colors = [plt.cm.Blues((inv - min_inv) / (max_inv - min_inv))
-                               for inv in investments]
+                # 如果节点没有投资记录，使用默认值
+                node_colors.append(0)
+
+        # 归一化颜色值用于着色
+        if node_colors and max(node_colors) > min(node_colors):
+            normalized_colors = [(color - min(node_colors)) / (max(node_colors) - min(node_colors))
+                                 for color in node_colors]
+            colors = [plt.cm.Blues(val) for val in normalized_colors]
         else:
-            node_colors = ['lightblue'] * len(G.nodes())
+            colors = ['lightblue'] * len(G.nodes())
 
         # 绘制边
         new_edges = [(u, v) for u, v, style in edge_data if style == 'new']
-        potential_edges = [(u, v) for u, v, style in edge_data if style == 'potential']
-
-        # 绘制潜在边（浅色）
-        nx.draw_networkx_edges(G, pos, edgelist=potential_edges,
-                               edge_color='lightgray', alpha=0.3, arrows=True, ax=ax)
 
         # 绘制新传播边（红色高亮）
         nx.draw_networkx_edges(G, pos, edgelist=new_edges,
                                edge_color='red', width=2, alpha=0.8, arrows=True, ax=ax)
 
-        # 绘制节点
-        nx.draw_networkx_nodes(G, pos, node_color=node_colors,
-                               node_size=300, alpha=0.8, ax=ax)
-
-        # 高亮新投资者
+        # 分离现有节点和新节点
+        all_nodes = list(G.nodes())
         new_nodes = [inv['对应的local_node_id'] for inv in new_investments]
-        nx.draw_networkx_nodes(G, pos, nodelist=new_nodes,
-                               node_color='red', node_size=500, alpha=0.9, ax=ax)
+        existing_nodes = [node for node in all_nodes if node not in new_nodes]
 
-        # 添加节点标签
-        nx.draw_networkx_labels(G, pos, font_size=8, ax=ax)
+        # 为现有节点和新节点分别准备颜色
+        existing_colors = [colors[all_nodes.index(node)] for node in existing_nodes]
+        new_node_colors = ['red'] * len(new_nodes)
+
+        # 绘制现有投资者节点
+        if existing_nodes:
+            nx.draw_networkx_nodes(G, pos, nodelist=existing_nodes,
+                                   node_color=existing_colors, node_size=100, alpha=0.8, ax=ax)
+
+        # 高亮新投资者节点
+        if new_nodes:
+            nx.draw_networkx_nodes(G, pos, nodelist=new_nodes,
+                                   node_color=new_node_colors, node_size=150, alpha=0.9, ax=ax)
 
         # 添加标题和信息
         ax.set_title(f'Investment Diffusion - Round {current_round}\n'
                      f'Total Investors: {len(G.nodes())}, New Investors: {len(new_investments)}',
                      fontsize=12)
 
-        # 添加图例
-        ax.text(0.02, 0.98, '● Existing Investor\n● New Investor\n→ Propagation',
-                transform=ax.transAxes, verticalalignment='top',
+        # 修正图例
+        ax.text(0.02, 0.98, '● Existing Investor (Blue)\n● New Investor (Red)\n→ Propagation Path',
+                transform=ax.transAxes, verticalalignment='top', fontsize=10,
                 bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
 
         ax.set_axis_off()
