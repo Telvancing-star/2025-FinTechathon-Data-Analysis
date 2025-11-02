@@ -1,7 +1,6 @@
 import pickle
 import pandas as pd
-import numpy as np
-import scipy.stats as stats
+import openpyxl
 
 with open('./data/Social/edge_probability_matrix.pkl', 'rb') as f:  # 注意是'rb'二进制读取模式
     results = pickle.load(f)
@@ -19,7 +18,7 @@ class CausalEffectAnalysis:
         with open('./data/Social/adj_neighbor.pkl', 'rb') as f:
             self.neighbor = pickle.load(f)
 
-        self.eigen_data = pd.read_csv('./data/compressed_features_expanded.csv', encoding='gb18030')
+        self.eigen_data = pd.read_csv('./data/Social/compressed_features_expanded.csv', encoding='gb18030')
 
     def get_record(self, ego_node, save_to_csv=True, filename=None):
         neighbors = self.neighbor[ego_node]  # 列表
@@ -40,8 +39,8 @@ class CausalEffectAnalysis:
 if __name__ == '__main__':
     analyzer = CausalEffectAnalysis()
 
-    data = pd.read_csv('./data/opinion_leader.csv', encoding='gb18030')
-    data_sorted = data.sort_values('s', ascending=False)
+    data = pd.read_excel('./data/变异系数法结果_版2.xlsx')
+    data_sorted = data.sort_values('综合得分', ascending=False)
 
     for index, row in data_sorted.head(5).iterrows():
-        analyzer.get_record(row['ego_node_id'], save_to_csv=True, filename=row['filename'])
+        analyzer.get_record(row['local_node_id'], save_to_csv=True)
