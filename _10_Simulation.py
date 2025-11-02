@@ -1,7 +1,8 @@
-import pickle, random
+import pickle
 import pandas as pd
 import numpy as np
 from itertools import chain
+from _5_data_reset import CompatibleData
 
 
 class Diffusion:
@@ -32,15 +33,17 @@ class Diffusion:
         return df['Round'].unique()
 
     def main(self):
-        data = pd.read_csv('./data/cluster_with_rounds.csv')
+        data = pd.read_csv('./data/cluster_with_rounds.csv', encoding='gb18030')
         df = data[data['Name of the Political Party'] == self.target]  # 初始已投资记录, 此时只考虑一个产品
         # 疑问：什么叫把多个同一节点视为不同的？
         xi, rounds = self.xi, self._get_round(df)
         for round in range(26):
-            records = df[df['Round'] == round]  # 获取本轮存在的投资记录
-            self.mean = df[df['Round'] <= round]['Denominations'].mean()
+
+            records = df[df['Round'] <= round]  # 获取本轮存在的投资记录
+            self.mean = records['Denominations'].mean()
             nodes = records['对应的local_node_id'].unique()  # 获取本轮存在的已有投资者
-            if not nodes:  # 若本轮没有投资者
+
+            if len(nodes) == 0:  # 若本轮没有投资者
                 # plot 执行等待
                 continue
             else:
@@ -49,26 +52,43 @@ class Diffusion:
                     self.neighbor[node] for node in nodes if node in self.neighbor
                 ))
 
-                for neighbor in all_neighbors:  # 遍历潜在投资者
-                    if neighbor not in nodes and self.P[neighbor] >= self.threshold:  # 不能是已投资者且 neighbor 具备投资倾向
-                        spread_nodes = [node for node in self.neighbor[neighbor] if node in nodes]  # 找到潜在传播者
+                for potential_investor in all_neighbors:  # 重命名循环变量
+                    if potential_investor not in nodes and self.P[potential_investor] >= self.threshold:
+                        spread_nodes = [node for node in self.neighbor[potential_investor] if node in nodes]  # 找到潜在传播者
                         spread_record = records[records['对应的local_node_id'].isin(spread_nodes)]  # 找到潜在传播记录
+                        grouped = spread_record.groupby('Round')  # 按已投资者的投资发生轮次分组
 
-                        # 批量生成 潜在传播的记录数 次伯努利试验结果
-                        bernoulli_results = np.random.binomial(1, self.P[neighbor], spread_record.shape[0])
+                        # # 批量生成 潜在传播的记录数 次伯努利试验结果
+                        # bernoulli_results = np.random.binomial(1, self.P[potential_investor], spread_record.shape[0])
 
-                        if np.any(bernoulli_results) and self.P[neighbor] >= self.threshold:
+                        # 收集所有组的伯努利试验结果
+                        all_bernoulli_results = []
+
+                        for round_name, round_group in grouped:
+                            # 获取该轮次的记录数
+                            n_trials = round_group.shape[0]
+
+                            # 计算该轮次的衰减后概率
+                            adjusted_prob = self.P[potential_investor] * self.xi ** (26 - round_group['Round'])
+
+                            # 进行该轮次的伯努利试验
+                            round_bernoulli_results = np.random.binomial(1, adjusted_prob, n_trials)
+
+                            # 添加到总结果中
+                            all_bernoulli_results.extend(round_bernoulli_results)
+
+                        if np.any(all_bernoulli_results) and self.P[potential_investor] >= self.threshold:
                             # 更新df
                             new_row = pd.DataFrame({
                                 'Name of the Political Party': self.target,
                                 'Prefix': '/',
                                 'Round': round + 1,
-                                'Denominations': self._investment(np.random.choice(spread_record['对应的local_node_id'])),
+                                'Denominations': self._investment(
+                                    np.random.choice(spread_record['对应的local_node_id'])),
                                 'Journal Date': '/'
                             })
                             # 使用concat合并
                             df = pd.concat([df, new_row], ignore_index=True)
-            self.P *= xi  # 更新概率向量
         return
 
 
@@ -76,3 +96,8 @@ if __name__ == '__main__':
     terget = 'BHARATIYA JANATA PARTY'
     run = Diffusion(terget)
     run.main()
+
+'''
+帮我添加一个可视化：对每一轮的存在投资行为（records）进行绘图，用节点表示投资者，用有向边表示上一轮投资的传播（所以最初轮的投资是没有边的独立集），用颜色深浅体现不同投资者投入资金的多少。
+如果可以，将27张图（26轮，每次绘图要用到本轮投资者和预测结果，体现投资的传播）形成一张动图并保存
+'''
