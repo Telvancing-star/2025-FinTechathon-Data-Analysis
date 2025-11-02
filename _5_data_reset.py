@@ -184,6 +184,8 @@ def complete_data_processing_pipeline():
     # # 然后提取特征
     feature_cols = [f'feature_{i}' for i in range(1, 22)]
     X = df[feature_cols].values
+    X_df = pd.DataFrame(X, columns=feature_cols)
+    X_df.to_csv('./data/Social/feature_matrix_with_headers.csv', index=False)
     print(f"特征矩阵形状: {X.shape}")
 
     # 4. 构建邻接矩阵
