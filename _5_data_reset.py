@@ -178,10 +178,6 @@ def complete_data_processing_pipeline():
 
     # 2. 构建特征矩阵
     print("\n步骤2: 构建特征矩阵...")
-    # # 按照 'local_node_id' 对数据进行排序
-    # df_sorted = df.sort_values('local_node_id')
-    #
-    # # 然后提取特征
     feature_cols = [f'feature_{i}' for i in range(1, 22)]
     X = df[feature_cols].values
     X_df = pd.DataFrame(X, columns=feature_cols)

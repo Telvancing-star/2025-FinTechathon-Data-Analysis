@@ -225,7 +225,7 @@ def run_probability_analysis(data, beta_hat, output_file='probability_analysis.p
     print(f"边数预测: {predicted_edges:.0f} (实际: {actual_edges}, 误差: {edge_prediction_error * 100:.2f}%)")
     # print(f"互惠率预测: {np.mean(P_recip) * 100:.2f}% (实际: {actual_reciprocity_rate * 100:.2f}%)")
     # print(f"平均传递性概率: {np.mean(P_trans) * 100:.2f}%")
-    # print(f"流行度参数γ范围: [{np.min(gamma_val):.4f}, {np.max(gamma_val):.4f}]")
+    print(f"流行度参数γ范围: [{np.min(gamma):.4f}, {np.max(gamma):.4f}]")
 
     return results
 
