@@ -49,55 +49,59 @@ class Diffusion:
                 continue
             else:
                 # 获取所有邻居并合并, 这些是本轮的潜在投资对象
-                all_neighbors = list(chain.from_iterable(
-                    self.neighbor[node] for node in nodes if node in self.neighbor
-                ))
+                all_neighbors = set()
+                for node in nodes:
+                    if node in self.neighbor:
+                        all_neighbors.update(self.neighbor[node])
+                # 移除已经是投资者的人
+                all_neighbors = all_neighbors - set(nodes)
 
                 for potential_investor in all_neighbors:  # 重命名循环变量
 
-                    if potential_investor not in nodes:
-                        spread_nodes = [node for node in self.neighbor[potential_investor] if node in nodes]  # 找到潜在传播者
-                        spread_record = records[records['对应的local_node_id'].isin(spread_nodes)]  # 找到潜在传播记录
-                        grouped = spread_record.groupby('Round')  # 按已投资者的投资发生轮次分组
+                    spread_nodes = [node for node in self.neighbor[potential_investor] if node in nodes]  # 找到潜在传播者
+                    spread_record = records[records['对应的local_node_id'].isin(spread_nodes)]  # 找到潜在传播记录
+                    grouped = spread_record.groupby('Round')  # 按已投资者的投资发生轮次分组
 
-                        # 收集所有组的伯努利试验结果
-                        invest_prob = 0
-                        all_bernoulli_results = []
+                    # 收集所有组的伯努利试验结果
+                    invest_prob = 0
+                    all_bernoulli_results = []
 
-                        for round_name, round_group in grouped:
+                    for round_name, round_group in grouped:
 
-                            round_value = float(round_name) if isinstance(round_name, str) else round_name
-                            trail = round - round_value
+                        round_value = float(round_name) if isinstance(round_name, str) else round_name
+                        trail = round - round_value
 
-                            if trail < self.num:  # 只考虑最近 num 轮的影响
+                        # if trail < self.num:  # 只考虑最近 num 轮的影响
 
-                                n_trials = round_group.shape[0]  # 获取该轮次的记录数, 也就是有
+                        n_trials = round_group.shape[0]  # 获取该轮次的记录数, 也就是有
 
-                                # 计算该轮次的衰减后概率, 更新投资概率
-                                adjusted_prob = self.P[potential_investor] * self.xi ** trail
-                                invest_prob += adjusted_prob * n_trials ** 0.75  # 同一人重复投资对潜在投资者的影响是衰减的
+                        # 计算该轮次的衰减后概率, 更新投资概率
+                        adjusted_prob = self.P[potential_investor] * self.xi ** trail
+                        invest_prob += adjusted_prob * n_trials ** (1-self.data.delta)  # 同一人重复投资对潜在投资者的影响是衰减的
 
-                                # 进行该轮次的伯努利试验
-                                round_bernoulli_results = np.random.binomial(1, adjusted_prob, n_trials)
+                        # 进行该轮次的伯努利试验
+                        round_bernoulli_results = np.random.binomial(1, adjusted_prob, n_trials)
 
-                                # 添加到总结果中
-                                all_bernoulli_results.extend(round_bernoulli_results)
+                        # 添加到总结果中
+                        all_bernoulli_results.extend(round_bernoulli_results)
 
-                        if invest_prob >= self.threshold:
-                            print(round, potential_investor, invest_prob)
+                    if invest_prob >= self.threshold:
+                        print(round, potential_investor, invest_prob)
+                    # if round > 1:
+                    #     print(round, potential_investor, invest_prob)
 
-                        if np.any(all_bernoulli_results) and invest_prob >= self.threshold:
-                            # 更新df
-                            new_row = pd.DataFrame([{
-                                'Name of the Political Party': self.target,
-                                'Prefix': '/',
-                                'Round': round + 1,
-                                'Denominations': self._investment(
-                                    np.random.choice(spread_record['对应的local_node_id'])),
-                                'Journal Date': '/'
-                            }])
-                            # 使用concat合并
-                            df = pd.concat([df, new_row], ignore_index=True)
+                    if np.any(all_bernoulli_results) and invest_prob >= self.threshold:
+                        # 更新df
+                        new_row = pd.DataFrame([{
+                            'Name of the Political Party': self.target,
+                            'Prefix': '/',
+                            'Round': round + 1,
+                            'Denominations': self._investment(
+                                np.random.choice(spread_record['对应的local_node_id'])),
+                            'Journal Date': '/'
+                        }])
+                        # 使用concat合并
+                        df = pd.concat([df, new_row], ignore_index=True)
         return df
 
 
