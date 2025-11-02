@@ -1,15 +1,15 @@
 import pickle, math
 import pandas as pd
 import numpy as np
-from itertools import chain
 from _5_data_reset import CompatibleData
 
 
 class Diffusion:
-    def __init__(self, target, num=3):
+    def __init__(self, target, num=3, iter=10):
         self.target = target  # 产品
         self.num = num
-        self.xi = 0.5
+        self.iter = iter
+        self.xi = 0.95
         self.threshold = 0.6
         self.a = 0.6
         self.c = 0.4
@@ -36,13 +36,14 @@ class Diffusion:
     def main(self):
         data = pd.read_csv('./data/cluster_with_rounds.csv', encoding='gb18030')
         df = data[data['Name of the Political Party'] == self.target]  # 初始已投资记录, 此时只考虑一个产品
+        self.oiter = max(self._get_round(df))
 
-        for round in range(26):
+        for round in range(self.oiter + 1, self.oiter + self.iter + 1):
 
-            records = df[df['Round'] <= round]  # 获取本轮存在的投资记录
+            records = df[df['Round'] < round]   # 获取本轮存在的投资记录
             self.investment = dict(zip(records['对应的local_node_id'], records['Denominations']))
             self.mean = records['Denominations'].mean()
-            nodes = records['对应的local_node_id'].unique()  # 获取本轮存在的已有投资者
+            nodes = records['对应的local_node_id'].unique()  # 获取本轮之前存在的已有投资者
 
             if len(nodes) == 0:  # 若本轮没有投资者
                 # plot 执行等待
@@ -53,11 +54,11 @@ class Diffusion:
                 for node in nodes:
                     if node in self.neighbor:
                         all_neighbors.update(self.neighbor[node])
-                # 移除已经是投资者的人
-                all_neighbors = all_neighbors - set(nodes)
 
-                for potential_investor in all_neighbors:  # 重命名循环变量
+                # 在循环外部收集新投资者
+                new_investments = []
 
+                for potential_investor in all_neighbors:
                     spread_nodes = [node for node in self.neighbor[potential_investor] if node in nodes]  # 找到潜在传播者
                     spread_record = records[records['对应的local_node_id'].isin(spread_nodes)]  # 找到潜在传播记录
                     grouped = spread_record.groupby('Round')  # 按已投资者的投资发生轮次分组
@@ -67,17 +68,14 @@ class Diffusion:
                     all_bernoulli_results = []
 
                     for round_name, round_group in grouped:
-
                         round_value = float(round_name) if isinstance(round_name, str) else round_name
                         trail = round - round_value
-
-                        # if trail < self.num:  # 只考虑最近 num 轮的影响
 
                         n_trials = round_group.shape[0]  # 获取该轮次的记录数, 也就是有
 
                         # 计算该轮次的衰减后概率, 更新投资概率
                         adjusted_prob = self.P[potential_investor] * self.xi ** trail
-                        invest_prob += adjusted_prob * n_trials ** (1-self.data.delta)  # 同一人重复投资对潜在投资者的影响是衰减的
+                        invest_prob += adjusted_prob * n_trials
 
                         # 进行该轮次的伯努利试验
                         round_bernoulli_results = np.random.binomial(1, adjusted_prob, n_trials)
@@ -85,23 +83,28 @@ class Diffusion:
                         # 添加到总结果中
                         all_bernoulli_results.extend(round_bernoulli_results)
 
-                    if invest_prob >= self.threshold:
-                        print(round, potential_investor, invest_prob)
-                    # if round > 1:
-                    #     print(round, potential_investor, invest_prob)
-
                     if np.any(all_bernoulli_results) and invest_prob >= self.threshold:
-                        # 更新df
-                        new_row = pd.DataFrame([{
+                        # 收集新投资信息，稍后统一添加到df
+                        source_node = np.random.choice(spread_record['对应的local_node_id'])
+                        new_investments.append({
                             'Name of the Political Party': self.target,
                             'Prefix': '/',
-                            'Round': round + 1,
-                            'Denominations': self._investment(
-                                np.random.choice(spread_record['对应的local_node_id'])),
+                            'Round': round,
+                            'Denominations': self._investment(source_node),
+                            '对应的local_node_id': potential_investor,
                             'Journal Date': '/'
-                        }])
-                        # 使用concat合并
-                        df = pd.concat([df, new_row], ignore_index=True)
+                        })
+
+                # 在循环外部统一更新df
+                if new_investments:
+                    new_rows = pd.DataFrame(new_investments)
+                    df = pd.concat([df, new_rows], ignore_index=True)
+
+        # 保存到新文件
+        output_filename = f'./data/simulation_results_{self.target.replace(" ", "_")}_{round}.csv'
+        df.to_csv(output_filename, index=False, encoding='gb18030')
+        print(f"模拟结果已保存到: {output_filename}")
+
         return df
 
 
