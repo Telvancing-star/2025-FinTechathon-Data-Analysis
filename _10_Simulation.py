@@ -1,16 +1,19 @@
 import pickle, math
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
+import networkx as nx
+from matplotlib.animation import FuncAnimation
 from _5_data_reset import CompatibleData
 
 
 class Diffusion:
-    def __init__(self, target, num=3, iter=10):
+    def __init__(self, target, xi=0.95, threshold=0.6, num=3, iter=10):
         self.target = target  # 产品
         self.num = num
         self.iter = iter
-        self.xi = 0.95
-        self.threshold = 0.6
+        self.xi = xi
+        self.threshold = threshold
         self.a = 0.6
         self.c = 0.4
         self.investment = {}
@@ -27,26 +30,130 @@ class Diffusion:
         self.beta_hat = results['beta_hat']
         self.P = results['P_edge']
 
+        # 存储每轮的可视化数据
+        self.visualization_data = []
+
     def _investment(self, source_node):
         return self.a * self.investment[source_node] + self.c * self.mean
 
     def _get_round(self, df):
         return df['Round'].unique()
 
+    def _create_network_graph(self, df, current_round, new_investments):
+        """创建当前轮次的网络图数据"""
+        # 获取当前轮次及之前的所有投资记录
+        records = df[df['Round'] <= current_round]
+
+        # 创建有向图
+        G = nx.DiGraph()
+
+        # 添加节点和投资金额
+        node_investments = {}
+        for _, row in records.iterrows():
+            node_id = row['对应的local_node_id']
+            investment = row['Denominations']
+            G.add_node(node_id, investment=investment)
+            node_investments[node_id] = investment
+
+        # 添加边（传播关系）
+        edge_data = []
+
+        # 对于当前轮次的新投资者，添加从传播者到他们的边
+        for new_inv in new_investments:
+            new_node = new_inv['对应的local_node_id']
+            # 找到影响这个新投资者的传播者
+            spread_nodes = [node for node in self.neighbor[new_node]
+                            if node in G.nodes and node in records['对应的local_node_id'].values]
+            if spread_nodes:
+                # 随机选择一个传播者（模拟实际传播路径）
+                source_node = np.random.choice(spread_nodes)
+                G.add_edge(source_node, new_node)
+                edge_data.append((source_node, new_node, 'new'))
+
+        # 对于之前的投资者，也添加传播关系（基于邻居关系）
+        for node in G.nodes():
+            if node in self.neighbor:
+                for neighbor_node in self.neighbor[node]:
+                    if neighbor_node in G.nodes and not G.has_edge(node, neighbor_node):
+                        # 只添加可能存在的传播关系
+                        G.add_edge(node, neighbor_node, style='potential')
+
+        return G, node_investments, edge_data
+
+    def _plot_network(self, G, node_investments, edge_data, current_round, new_investments, fig, ax):
+        """绘制网络图"""
+        ax.clear()
+
+        # 设置布局
+        pos = nx.spring_layout(G, k=1, iterations=50)
+
+        # 准备节点颜色（根据投资金额）
+        investments = list(node_investments.values())
+        if investments:
+            min_inv, max_inv = min(investments), max(investments)
+            if min_inv == max_inv:
+                node_colors = ['lightblue'] * len(G.nodes())
+            else:
+                node_colors = [plt.cm.Blues((inv - min_inv) / (max_inv - min_inv))
+                               for inv in investments]
+        else:
+            node_colors = ['lightblue'] * len(G.nodes())
+
+        # 绘制边
+        new_edges = [(u, v) for u, v, style in edge_data if style == 'new']
+        potential_edges = [(u, v) for u, v, style in edge_data if style == 'potential']
+
+        # 绘制潜在边（浅色）
+        nx.draw_networkx_edges(G, pos, edgelist=potential_edges,
+                               edge_color='lightgray', alpha=0.3, arrows=True, ax=ax)
+
+        # 绘制新传播边（红色高亮）
+        nx.draw_networkx_edges(G, pos, edgelist=new_edges,
+                               edge_color='red', width=2, alpha=0.8, arrows=True, ax=ax)
+
+        # 绘制节点
+        nx.draw_networkx_nodes(G, pos, node_color=node_colors,
+                               node_size=300, alpha=0.8, ax=ax)
+
+        # 高亮新投资者
+        new_nodes = [inv['对应的local_node_id'] for inv in new_investments]
+        nx.draw_networkx_nodes(G, pos, nodelist=new_nodes,
+                               node_color='red', node_size=500, alpha=0.9, ax=ax)
+
+        # 添加节点标签
+        nx.draw_networkx_labels(G, pos, font_size=8, ax=ax)
+
+        # 添加标题和信息
+        ax.set_title(f'Investment Diffusion - Round {current_round}\n'
+                     f'Total Investors: {len(G.nodes())}, New Investors: {len(new_investments)}',
+                     fontsize=12)
+
+        # 添加图例
+        ax.text(0.02, 0.98, '● Existing Investor\n● New Investor\n→ Propagation',
+                transform=ax.transAxes, verticalalignment='top',
+                bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
+
+        ax.set_axis_off()
+
     def main(self):
         data = pd.read_csv('./data/cluster_with_rounds.csv', encoding='gb18030')
         df = data[data['Name of the Political Party'] == self.target]  # 初始已投资记录, 此时只考虑一个产品
         self.oiter = max(self._get_round(df))
 
+        # 准备动画
+        fig, ax = plt.subplots(figsize=(12, 8))
+        frames = []
+
         for round in range(self.oiter + 1, self.oiter + self.iter + 1):
 
-            records = df[df['Round'] < round]   # 获取本轮存在的投资记录
+            records = df[df['Round'] < round]  # 获取本轮存在的投资记录
             self.investment = dict(zip(records['对应的local_node_id'], records['Denominations']))
             self.mean = records['Denominations'].mean()
             nodes = records['对应的local_node_id'].unique()  # 获取本轮之前存在的已有投资者
 
             if len(nodes) == 0:  # 若本轮没有投资者
-                # plot 执行等待
+                # 记录空帧
+                frames.append((df, round, []))
                 continue
             else:
                 # 获取所有邻居并合并, 这些是本轮的潜在投资对象
@@ -60,6 +167,8 @@ class Diffusion:
 
                 for potential_investor in all_neighbors:
                     spread_nodes = [node for node in self.neighbor[potential_investor] if node in nodes]  # 找到潜在传播者
+                    if not spread_nodes:
+                        continue
                     spread_record = records[records['对应的local_node_id'].isin(spread_nodes)]  # 找到潜在传播记录
                     grouped = spread_record.groupby('Round')  # 按已投资者的投资发生轮次分组
 
@@ -75,7 +184,7 @@ class Diffusion:
 
                         # 计算该轮次的衰减后概率, 更新投资概率
                         adjusted_prob = self.P[potential_investor] * self.xi ** trail
-                        invest_prob += adjusted_prob * n_trials
+                        invest_prob += adjusted_prob * n_trials ** (1 - self.data.delta)
 
                         # 进行该轮次的伯努利试验
                         round_bernoulli_results = np.random.binomial(1, adjusted_prob, n_trials)
@@ -100,6 +209,26 @@ class Diffusion:
                     new_rows = pd.DataFrame(new_investments)
                     df = pd.concat([df, new_rows], ignore_index=True)
 
+                # 记录当前轮次的可视化数据
+                frames.append((df.copy(), round, new_investments))
+
+        # 创建动画
+        def update(frame_idx):
+            df_frame, round, new_investments = frames[frame_idx]
+            G, node_investments, edge_data = self._create_network_graph(df_frame, round, new_investments)
+            self._plot_network(G, node_investments, edge_data, round, new_investments, fig, ax)
+            return ax
+
+        # 生成动画
+        anim = FuncAnimation(fig, update, frames=len(frames), interval=1000, repeat=False)
+
+        # 保存动图
+        gif_filename = f'./data/diffusion_animation_{self.target.replace(" ", "_")}.gif'
+        anim.save(gif_filename, writer='pillow', fps=1)
+        print(f"动图已保存到: {gif_filename}")
+
+        plt.close()
+
         # 保存到新文件
         output_filename = f'./data/simulation_results_{self.target.replace(" ", "_")}_{round}.csv'
         df.to_csv(output_filename, index=False, encoding='gb18030')
@@ -112,8 +241,3 @@ if __name__ == '__main__':
     terget = 'BHARATIYA JANATA PARTY'
     run = Diffusion(terget)
     run.main()
-
-'''
-帮我添加一个可视化：对每一轮的存在投资行为（records）进行绘图，用节点表示投资者，用有向边表示上一轮投资的传播（所以最初轮的投资是没有边的独立集），用颜色深浅体现不同投资者投入资金的多少。
-如果可以，将27张图（26轮，每次绘图要用到本轮投资者和预测结果，体现投资的传播）形成一张动图并保存
-'''
