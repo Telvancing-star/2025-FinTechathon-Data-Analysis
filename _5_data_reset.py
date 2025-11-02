@@ -151,7 +151,7 @@ class CompatibleData:
             delta_est = (np.log(avg_out_degree) - np.log(C)) / np.log(self.N)
             print(f"  C={C}: δ ≈ {delta_est:.4f}")
 
-        self.delta = 0
+        self.delta = 0.25
 
         print(f"数据兼容性检查:")
         print(f"  X.shape: {self.X.shape}")
