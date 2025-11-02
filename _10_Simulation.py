@@ -33,33 +33,41 @@ class Diffusion:
 
     def main(self):
         data = pd.read_csv('./data/cluster_with_rounds.csv')
-        df = data[data['Name of the Political Party'] == self.target]  # 初始已投资人
-        self.mean = df['Denominations'].mean()  # 此时只考虑一个产品
+        df = data[data['Name of the Political Party'] == self.target]  # 初始已投资记录, 此时只考虑一个产品
         # 疑问：什么叫把多个同一节点视为不同的？
         xi, rounds = self.xi, self._get_round(df)
         for round in range(26):
-            nodes = df['对应的local_node_id'].unique()  # 疑问：什么叫把多个同一节点视为不同的？
-            # 获取所有邻居并合并
-            all_neighbors = list(chain.from_iterable(
-                self.neighbor[node] for node in nodes if node in self.neighbor
-            ))
-            if round not in rounds:
+            records = df[df['Round'] == round]  # 获取本轮存在的投资记录
+            self.mean = df[df['Round'] <= round]['Denominations'].mean()
+            nodes = records['对应的local_node_id'].unique()  # 获取本轮存在的已有投资者
+            if not nodes:  # 若本轮没有投资者
                 # plot 执行等待
                 continue
             else:
-                for i in all_neighbors:
-                    if random.random() < self.P[i] and self.P[i] >= self.threshold:
-                        # 更新df
-                        new_row = pd.DataFrame({
-                            'Name of the Political Party': self.target,
-                            'Prefix': '/',
-                            'Round': round + 1,
-                            'Denominations': self._investment(np.random.choice(nodes)),
-                            'Journal Date': '/'
-                        })
-                        # 使用concat合并
-                        df = pd.concat([df, new_row], ignore_index=True)
-                        rounds = self._get_round(df)  # 更新有投资者的轮次
+                # 获取所有邻居并合并, 这些是本轮的潜在投资对象
+                all_neighbors = list(chain.from_iterable(
+                    self.neighbor[node] for node in nodes if node in self.neighbor
+                ))
+
+                for neighbor in all_neighbors:  # 遍历潜在投资者
+                    if neighbor not in nodes and self.P[neighbor] >= self.threshold:  # 不能是已投资者且 neighbor 具备投资倾向
+                        spread_nodes = [node for node in self.neighbor[neighbor] if node in nodes]  # 找到潜在传播者
+                        spread_record = records[records['对应的local_node_id'].isin(spread_nodes)]  # 找到潜在传播记录
+
+                        # 批量生成 潜在传播的记录数 次伯努利试验结果
+                        bernoulli_results = np.random.binomial(1, self.P[neighbor], spread_record.shape[0])
+
+                        if np.any(bernoulli_results) and self.P[neighbor] >= self.threshold:
+                            # 更新df
+                            new_row = pd.DataFrame({
+                                'Name of the Political Party': self.target,
+                                'Prefix': '/',
+                                'Round': round + 1,
+                                'Denominations': self._investment(np.random.choice(spread_record['对应的local_node_id'])),
+                                'Journal Date': '/'
+                            })
+                            # 使用concat合并
+                            df = pd.concat([df, new_row], ignore_index=True)
             self.P *= xi  # 更新概率向量
         return
 
