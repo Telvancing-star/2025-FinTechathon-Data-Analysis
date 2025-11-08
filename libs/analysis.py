@@ -39,6 +39,11 @@ def analyze_graph_from_csv(csv_file_path):
     print(f"平均度: {np.mean(degrees):.2f}")
     print(f"度标准差: {np.std(degrees):.2f}")
 
+    # 获取最大度节点的编号
+    max_degree = max(degrees)
+    max_degree_nodes = [node for node, degree in G.degree() if degree == max_degree]
+    print(f"最大度节点编号: {max_degree_nodes}")
+
     # 网络密度
     density = nx.density(G)
     print(f"网络密度: {density:.4f}")

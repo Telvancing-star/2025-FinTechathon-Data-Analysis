@@ -35,14 +35,14 @@ class Pop_NR_Fixed:
             vec_slice = vec[start_idx:end_idx]
 
             # 计算 pi 值 - 关键修复：确保形状完全匹配
-            # vec.reshape(1, -1) 形状: (1, 4167)
+            # vec.reshape(1, -1) 形状: (1, 4171)
             # vec_slice 形状: (slice_size, 1)
-            # 我们需要广播到 (slice_size, 4167)
+            # 我们需要广播到 (slice_size, 4171)
             vec_slice_broadcast = vec_slice  # (slice_size, 1)
-            vec_flat_broadcast = vec.reshape(1, -1)  # (1, 4167)
+            vec_flat_broadcast = vec.reshape(1, -1)  # (1, 4171)
 
-            denominator = vec_slice_broadcast + 2 * vec_flat_broadcast  # (slice_size, 4167)
-            pi_slice_value = np.sqrt(vec_flat_broadcast / denominator)  # (slice_size, 4167)
+            denominator = vec_slice_broadcast + 2 * vec_flat_broadcast  # (slice_size, 4171)
+            pi_slice_value = np.sqrt(vec_flat_broadcast / denominator)  # (slice_size, 4171)
 
             # 确保没有数值问题
             pi_slice_value = np.clip(pi_slice_value, 1e-10, 1 - 1e-10)
