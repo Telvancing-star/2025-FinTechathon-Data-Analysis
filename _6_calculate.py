@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import pickle
-from _5_data_reset import CompatibleData
+from _5_data_generate import CompatibleData
 
 
 def compute_edge_probability_matrix(data, beta, alpha_hat=None):

@@ -1,238 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-class Pop_NR_Fixed:
-    def __init__(self, data):
-        self.X = data.X
-        self.N, self.p = self.X.shape
-        self.A = data.A
-        self.d_in = data.in_degrees
-        self.col_prod = self.A.T @ self.A
-
-    def generate_pi_matrix(self, beta):
-        beta = np.array(beta).reshape(-1, 1)
-        vec = np.exp(2 * (self.X @ beta)).reshape(-1, 1)
-
-        len_slice = 1000
-        num_slices = int(np.ceil(self.N / len_slice))
-
-        # 初始化结果矩阵
-        pi = None
-        log_pi = None
-        log_pi_minus = None
-        const_grad1 = None
-        const_grad2 = None
-        const_hes1 = None
-        const_hes2 = None
-
-        for r in range(num_slices):
-            start_idx = r * len_slice
-            end_idx = min((r + 1) * len_slice, self.N)
-            slice_size = end_idx - start_idx
-
-            # 获取当前切片的数据
-            A_slice = self.A[start_idx:end_idx, :]
-            vec_slice = vec[start_idx:end_idx]
-
-            # 计算 pi 值 - 关键修复：确保形状完全匹配
-            # vec.reshape(1, -1) 形状: (1, 4171)
-            # vec_slice 形状: (slice_size, 1)
-            # 我们需要广播到 (slice_size, 4171)
-            vec_slice_broadcast = vec_slice  # (slice_size, 1)
-            vec_flat_broadcast = vec.reshape(1, -1)  # (1, 4171)
-
-            denominator = vec_slice_broadcast + 2 * vec_flat_broadcast  # (slice_size, 4171)
-            pi_slice_value = np.sqrt(vec_flat_broadcast / denominator)  # (slice_size, 4171)
-
-            # 确保没有数值问题
-            pi_slice_value = np.clip(pi_slice_value, 1e-10, 1 - 1e-10)
-
-            # 计算各种矩阵 - 关键：直接使用稠密矩阵避免稀疏矩阵形状问题
-            row_pi = A_slice.multiply(pi_slice_value)
-            row_log_pi = A_slice.multiply(np.log(pi_slice_value))
-            row_log_pi_minus = A_slice.multiply(np.log(1 - pi_slice_value))
-
-            # 对于需要稠密矩阵的操作，先转换
-            pi_slice_dense = row_pi.toarray()
-
-            # 计算梯度常数矩阵
-            grad_denom = 1 - pi_slice_dense
-            # 避免除零
-            grad_denom = np.where(grad_denom < 1e-10, 1e-10, grad_denom)
-
-            const_grad1_dense = (1 - 2 * pi_slice_dense ** 2) / grad_denom
-            row_const_grad1 = A_slice.multiply(const_grad1_dense)
-            row_const_grad2 = -row_pi.multiply(row_const_grad1)
-
-            # 计算海森常数矩阵
-            hes_denom = grad_denom ** 2
-            hes_denom = np.where(hes_denom < 1e-20, 1e-20, hes_denom)
-
-            const_hes1_dense = (4 * pi_slice_dense - 2 * pi_slice_dense ** 2 - 1) / hes_denom
-            const_hes2_dense = (4 * pi_slice_dense ** 3 - 6 * pi_slice_dense ** 2 + 1) / hes_denom
-
-            row_const_hes1 = A_slice.multiply(const_hes1_dense)
-            row_const_hes2 = A_slice.multiply(const_hes2_dense)
-
-            # 堆叠结果
-            if pi is None:
-                pi = row_pi
-                log_pi = row_log_pi
-                log_pi_minus = row_log_pi_minus
-                const_grad1 = row_const_grad1
-                const_grad2 = row_const_grad2
-                const_hes1 = row_const_hes1
-                const_hes2 = row_const_hes2
-            else:
-                pi = vstack([pi, row_pi])
-                log_pi = vstack([log_pi, row_log_pi])
-                log_pi_minus = vstack([log_pi_minus, row_log_pi_minus])
-                const_grad1 = vstack([const_grad1, row_const_grad1])
-                const_grad2 = vstack([const_grad2, row_const_grad2])
-                const_hes1 = vstack([const_hes1, row_const_hes1])
-                const_hes2 = vstack([const_hes2, row_const_hes2])
-
-        return pi, log_pi, log_pi_minus, const_grad1, const_grad2, const_hes1, const_hes2
-
-    def loss_grad_hessian(self, parameter):
-        parameter = np.array(parameter).reshape(-1, 1)
-        pi, log_pi, log_pi_minus, const_grad1, const_grad2, const_hes1, const_hes2 = self.generate_pi_matrix(
-            parameter)
-
-        print(f"调试 loss_grad_hessian 中的形状:")
-        print(f"  pi.shape: {pi.shape}")
-        print(f"  log_pi.shape: {log_pi.shape}")
-        print(f"  log_pi_minus.shape: {log_pi_minus.shape}")
-        print(f"  const_grad1.shape: {const_grad1.shape}")
-        print(f"  const_grad2.shape: {const_grad2.shape}")
-        print(f"  A.shape: {self.A.shape}")
-        print(f"  d_in.shape: {self.d_in.shape}")
-
-        # 关键修复：确保所有稀疏矩阵操作形状匹配
-        try:
-            # loss function
-            l2 = self.A.multiply(log_pi_minus).multiply(self.d_in.reshape(-1, 1))
-            l3 = -self.A.multiply(log_pi_minus)
-            l1 = self.col_prod.multiply(self.A).multiply(log_pi) - self.col_prod.multiply(self.A).multiply(
-                log_pi_minus)
-            loss = -(np.sum(l1) + np.sum(l2) + np.sum(l3)) / (self.N * (self.N - 1) * (self.N - 2))
-
-            # gradient
-            weight_g1 = self.col_prod.multiply(self.A).multiply(const_grad1)
-            weight_g2 = self.A.multiply(self.d_in.reshape(-1, 1)).multiply(const_grad2)
-            weight_g3 = -self.A.T.multiply(self.A.multiply(const_grad2))
-
-            weight_g = -(weight_g1 + weight_g2 + weight_g3)
-            g = np.zeros((self.p, 1))
-
-            splits = 1000
-            zipped_indices = zip(
-                *(np.array_split(weight_g.nonzero()[0], splits), np.array_split(weight_g.nonzero()[1], splits)))
-            for i_s, j_s in zipped_indices:
-                g += np.sum(weight_g[i_s, j_s] * (self.X[j_s,] - self.X[i_s,]), axis=0).reshape(-1, 1)
-
-            weight_h1 = self.col_prod.multiply(self.A).multiply(const_hes1)
-            weight_h2 = self.A.multiply(self.d_in.reshape(-1, 1)).multiply(const_hes2)
-            weight_h3 = -self.A.T.multiply(self.A.multiply(const_hes2))
-
-            weight_h = weight_h1 + weight_h2 + weight_h3
-            h = np.zeros((self.p, self.p))
-            zipped_indices = zip(
-                *(np.array_split(weight_h.nonzero()[0], splits), np.array_split(weight_h.nonzero()[1], splits)))
-            for i_s, j_s in zipped_indices:
-                h += (self.X[i_s,] - self.X[j_s,]).T @ (
-                        (self.X[i_s,] - self.X[j_s,]) * ((np.array(weight_h[i_s, j_s]).reshape(-1))).reshape(-1, 1))
-
-            return loss, g.reshape(-1, 1), h
-
-        except Exception as e:
-            print(f"loss_grad_hessian 中出错: {e}")
-            # 返回一些默认值以便继续运行
-            return 1.0, np.zeros((self.p, 1)), np.eye(self.p)
-
-    def run(self, running_parameter, alpha=1, max_iter=20, epsilon=1e-6):
-        running_parameter = np.array(running_parameter).reshape(-1, 1)
-        it = 0
-        L_old = None
-
-        # 记录收敛历史
-        loss_history = []
-
-        while it < max_iter:
-            print(f"\n迭代 {it + 1}:")
-            L, g, h = self.loss_grad_hessian(running_parameter)
-            loss_history.append(L)
-
-            # 计算条件数（处理奇异矩阵）
-            try:
-                cond_number = np.linalg.cond(h)
-                print(f"  损失: {L:.6f}, 梯度范数: {np.linalg.norm(g):.6f}")
-                print(f"  海森矩阵条件数: {cond_number:.2e}")
-            except (np.linalg.LinAlgError, ValueError):
-                print(f"  损失: {L:.6f}, 梯度范数: {np.linalg.norm(g):.6f}")
-                print(f"  海森矩阵条件数: inf (奇异矩阵)")
-                cond_number = np.inf
-
-            if L_old is not None:
-                err = abs(L_old - L) / (abs(L) + 1e-10)
-                print(f"  相对误差: {err:.6f}")
-                if err < epsilon:
-                    print("收敛!")
-                    break
-
-            L_old = L
-
-            # 处理海森矩阵求逆
-            if cond_number > 1e12 or not np.isfinite(cond_number):
-                print("  海森矩阵接近奇异，使用强正则化")
-                reg_strength = 1e-3 * np.eye(h.shape[0])  # 更强的正则化
-                h_safe = h + reg_strength
-                try:
-                    update = alpha * np.linalg.inv(h_safe) @ g
-                except:
-                    print("  正则化求逆失败，使用梯度下降")
-                    update = alpha * g / (np.linalg.norm(g) + 1e-10)
-            else:
-                try:
-                    update = alpha * np.linalg.inv(h) @ g
-                except np.linalg.LinAlgError:
-                    print("  海森矩阵求逆失败，使用正则化")
-                    reg_strength = 1e-6 * np.trace(h) / h.shape[0] * np.eye(h.shape[0])
-                    h_reg = h + reg_strength
-                    update = alpha * np.linalg.inv(h_reg) @ g
-
-            # 检查更新是否合理
-            update_norm = np.linalg.norm(update)
-            if update_norm > 10:  # 更新步长太大
-                print(f"  更新步长过大 ({update_norm:.2f})，进行裁剪")
-                update = update / update_norm * 2  # 限制最大步长为2
-
-            running_parameter = running_parameter - update
-            print(f"  参数更新范数: {np.linalg.norm(update):.6f}")
-
-            it += 1
-
-        # 绘制损失历史
-        self.plot_loss_history(loss_history)
-
-        return running_parameter
-
-    def plot_loss_history(self, loss_history):
-        """绘制损失函数收敛历史"""
-        try:
-            import matplotlib.pyplot as plt
-            plt.figure(figsize=(10, 6))
-            plt.plot(loss_history, 'b-o', linewidth=2, markersize=4)
-            plt.xlabel('迭代次数')
-            plt.ylabel('损失函数值')
-            plt.title('TR估计器收敛历史')
-            plt.grid(True, alpha=0.3)
-            plt.savefig('tr_convergence_history.png', dpi=300, bbox_inches='tight')
-            plt.close()
-            print("收敛历史图已保存为 'tr_convergence_history.png'")
-        except ImportError:
-            print("无法绘制收敛历史 (matplotlib 未安装)")
-
 # In[7]:
 
 
@@ -242,13 +10,9 @@ from scipy.sparse import csr_matrix, vstack
 
 
 class Pop:
-    def __init__(self, N, beta, delta, C_min, C_max, seed=0):
+    def __init__(self, N, beta, delta, C_min, C_max, seed=0, external_X=None):
         """
-        N: number of nodes
-        beta: feature coefficient
-        delta: controling rate of degree
-        C_min: minimum number of expected out degrees
-        C_max: maximum number of expected out degrees
+        直接要求传入特征矩阵X
         """
         self.N = N
         self.C_min = C_min
@@ -258,11 +22,21 @@ class Pop:
         self.p = len(beta)
         self.seed = seed
 
-        self._generate_parameter_alpha()
-        self._generate_popularity_and_feature()
+        # 必须传入特征矩阵X
+        if external_X is None:
+            raise ValueError("必须提供特征矩阵X")
+        if external_X.shape != (N, self.p):
+            raise ValueError(f"特征矩阵X的维度应为({N}, {self.p})，但得到{external_X.shape}")
+        self.X = external_X
 
+        self._generate_parameter_alpha()
+        self._generate_popularity()
         self._generate_adjacency_matrix()
         self._gen_in_degrees()
+
+    def _generate_popularity(self):
+        self.gamma = np.exp(self.X @ self.beta + self.alpha)
+        return
 
     def _generate_alpha(self):
         """
@@ -280,12 +54,6 @@ class Pop:
         test_exp_X_beta = np.exp(test_X @ self.beta)
         self.C_beta = np.mean(test_exp_X_beta)
         self.alpha, self.C_alpha = self._generate_alpha()
-        return
-
-    def _generate_popularity_and_feature(self):
-        # observable X
-        self.X = self.feature_generation(self.N, self.seed)
-        self.gamma = np.exp(self.X @ self.beta + self.alpha)
         return
 
     def _generate_adjacency_matrix(self):
@@ -708,51 +476,6 @@ def plugin(data, beta):
     H = H / (data.N * (data.N - 1))
     cov = np.linalg.inv(H) @ M @ np.linalg.inv(H) / (div * data.N)
     return cov, M, H
-
-# def plugin_my(data, beta):
-#     # plugin estimator of covariance when delta >0
-#     beta = np.array(beta).reshape(-1, 1)
-#
-#     X_beta = data.X @ beta.reshape(-1, 1)
-#     ep1 = np.exp(X_beta).reshape(-1, 1)
-#     vec = np.exp(2 * X_beta).reshape(-1, 1)
-#
-#     # estimate N^delta*C_alpha
-#     div = data.N * np.sqrt(2) * np.sum(data.A) / ((data.N - 1) * np.sum(ep1))
-#
-#     # estimate H
-#     H = np.zeros((data.p, data.p))
-#     for i in range(data.N):
-#         pi_i2i3 = np.sqrt(vec.T / (vec[i] + 2 * vec.T))
-#         weight_H = (1 - 2 * pi_i2i3 ** 2) * ep1[i] * ep1.reshape(1, -1) / (np.sqrt(3) * (1 - pi_i2i3))
-#         di_all = data.X[i, :] - data.X
-#         # compute H
-#         H += di_all.T @ (di_all * (weight_H.reshape(-1, 1)))
-#
-#     M = None
-#     # estimate M1
-#     num_blocks1 = int(data.N / 4)
-#     indices1 = np.array_split(np.arange(data.N), num_blocks1)
-#     M1 = np.zeros((data.p, data.p))
-#     for ids in indices1:
-#         M1 = M1 + compute_M1_block(ep1[ids], data.X[ids, :])[0]
-#     M1 = M1 / num_blocks1
-#
-#     if data.delta == 0:
-#         # estimate M0
-#         num_blocks0 = int(data.N / 3)
-#         indices0 = np.array_split(np.arange(data.N), num_blocks0)
-#         M0 = np.zeros((data.p, data.p))
-#         for ids in indices0:
-#             M0 = M0 + compute_M0_block(ep1[ids[0:3]], data.X[ids[0:3], :])[0]
-#         M0 = M0 / num_blocks0
-#         M = (M1 + M0 / div)
-#     else:
-#         M = M1
-#
-#     H = H / (data.N * (data.N - 1))
-#     cov = np.linalg.inv(H) @ M @ np.linalg.inv(H) / (div * data.N)
-#     return cov, M, H
 
 
 # In[12]:

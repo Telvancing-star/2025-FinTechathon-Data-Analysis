@@ -1,3 +1,4 @@
+# 获取压缩特征矩阵
 import numpy as np
 import pandas as pd
 from scipy.sparse import csr_matrix
@@ -7,8 +8,8 @@ import os
 class EgoFeatureProcessor:
     def __init__(self, ego_nodes, data_path):
         """
-        ego_nodes: list of ego node IDs
-        data_path: path to the directory containing ego network files
+        ego_nodes: ego node ID 列表
+        data_path: network 数据所在目录
         """
         self.ego_nodes = ego_nodes
         self.data_path = data_path

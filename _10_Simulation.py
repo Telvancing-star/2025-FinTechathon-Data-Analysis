@@ -4,7 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import networkx as nx
 from matplotlib.animation import FuncAnimation
-from _5_data_reset import CompatibleData
+from _5_data_generate import CompatibleData
 
 
 class Diffusion:
