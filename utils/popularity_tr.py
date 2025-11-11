@@ -7,10 +7,11 @@
 import numpy as np
 from scipy.stats import multivariate_normal
 from scipy.sparse import csr_matrix, vstack
+import pandas as pd
 
 
 class Pop:
-    def __init__(self, N, beta, delta, C_min, C_max, seed=0, external_X=None):
+    def __init__(self, N, beta, delta, C_min, C_max, seed=0, external_X=None, adjacency_csv_file=None):
         """
         直接要求传入特征矩阵X
         """
@@ -31,50 +32,193 @@ class Pop:
 
         self._generate_parameter_alpha()
         self._generate_popularity()
-        self._generate_adjacency_matrix()
+        self._generate_adjacency_matrix(adjacency_csv_file, self.N)
         self._gen_in_degrees()
 
     def _generate_popularity(self):
         self.gamma = np.exp(self.X @ self.beta + self.alpha)
         return
 
+    def _generate_alpha_MLE(self):
+        """
+        使用最大似然估计方法计算alpha参数
+        基于真实网络数据和特征矩阵
+        """
+        # 初始alpha估计
+        current_alpha = 0.0
+        max_iter = 20
+        tolerance = 1e-6
+        learning_rate = 0.1
+
+        print("开始alpha的最大似然估计...")
+
+        for iteration in range(max_iter):
+            # 计算当前alpha下的流行度
+            gamma = np.exp(self.X @ self.beta + current_alpha)
+
+            # 计算梯度
+            grad = 0.0
+            total_pairs = 0
+
+            # 使用随机采样来加速计算（对于大网络）
+            sample_size = min(10000, self.N * (self.N - 1))
+            sampled_pairs = 0
+
+            while sampled_pairs < sample_size:
+                # 随机选择一对节点
+                i, j = np.random.randint(0, self.N, 2)
+                if i == j:
+                    continue
+
+                # 计算连接概率（基于模型的简化版本）
+                # 注意：这里使用了模型的概率形式，需要与你的具体模型匹配
+                Z_diff_sq = (np.random.randn() - np.random.randn()) ** 2  # 简化：随机潜变量差异
+                prob_ij = np.exp(-Z_diff_sq / (2 * gamma[i] * gamma[j]))
+
+                # 观测到的连接
+                observed = self.A[i, j] if hasattr(self.A, 'shape') else self.A[i, j]
+
+                # 梯度贡献
+                grad += (observed - prob_ij) * prob_ij
+                sampled_pairs += 1
+                total_pairs += 1
+
+            # 平均梯度
+            if total_pairs > 0:
+                avg_grad = grad / total_pairs
+            else:
+                avg_grad = 0
+
+            # 更新alpha
+            alpha_update = learning_rate * avg_grad
+            current_alpha += alpha_update
+
+            print(
+                f"迭代 {iteration + 1}: alpha = {current_alpha:.6f}, 梯度 = {avg_grad:.6f}, 更新 = {alpha_update:.6f}")
+
+            # 检查收敛
+            if abs(alpha_update) < tolerance:
+                print(f"Alpha估计在迭代 {iteration + 1} 收敛")
+                break
+
+        # 根据估计的alpha计算C_alpha
+        C_alpha = np.exp(current_alpha + (1 - self.delta) * np.log(self.N))
+
+        # 确保C_alpha在合理范围内
+        C_alpha = np.clip(C_alpha, self.C_min, self.C_max)
+
+        print(f"最终估计: alpha = {current_alpha:.6f}, C_alpha = {C_alpha:.2f}")
+        return current_alpha, C_alpha
+
     def _generate_alpha(self):
         """
-        get parameter alpha
+        基于网络统计的alpha估计方法
         """
-        left = np.sqrt(2) * self.C_min / self.C_beta
-        right = np.sqrt(2) * self.C_max / self.C_beta
-        C_alpha = 0.1 * right + 0.9 * left
-        C_alpha = round(C_alpha)
-        alpha = (np.log(C_alpha) - (1 - self.delta) * np.log(self.N)).item()
-        return alpha, C_alpha
+        print("使用基于网络统计的alpha估计...")
+
+        # 计算网络的基本统计量
+        if hasattr(self, 'A') and self.A is not None:
+            # 使用真实网络数据
+            total_edges = np.sum(self.A)
+            network_density = total_edges / (self.N * (self.N - 1))
+            avg_degree = total_edges / self.N
+        else:
+            # 如果没有网络数据，使用期望值
+            avg_degree = (self.C_min + self.C_max) / 2
+            network_density = avg_degree / (self.N - 1)
+
+        print(f"网络统计: 平均度 = {avg_degree:.2f}, 密度 = {network_density:.6f}")
+
+        # 基于模型关系估计C_alpha
+        # 模型: E[degree] ≈ C_alpha * C_beta * N^(delta-1)
+        expected_degree = self.C_alpha * self.C_beta * (self.N ** (self.delta - 1))
+
+        # 使用网格搜索找到最优的C_alpha
+        best_C_alpha = self.C_min
+        best_error = float('inf')
+
+        C_alpha_candidates = np.linspace(self.C_min, self.C_max, 100)
+
+        for candidate in C_alpha_candidates:
+            # 计算对应的alpha
+            candidate_alpha = np.log(candidate) - (1 - self.delta) * np.log(self.N)
+
+            # 计算期望度
+            expected_deg = candidate * self.C_beta * (self.N ** (self.delta - 1))
+
+            # 计算误差（与观测度或目标度的差异）
+            error = abs(expected_deg - avg_degree)
+
+            if error < best_error:
+                best_error = error
+                best_C_alpha = candidate
+
+        # 计算对应的alpha
+        best_alpha = np.log(best_C_alpha) - (1 - self.delta) * np.log(self.N)
+
+        print(f"估计结果: C_alpha = {best_C_alpha:.2f}, alpha = {best_alpha:.6f}")
+        print(f"期望平均度: {best_C_alpha * self.C_beta * (self.N ** (self.delta - 1)):.2f}")
+
+        return best_alpha, best_C_alpha
 
     def _generate_parameter_alpha(self):
-        test_X = self.feature_generation(100000, self.seed + 1000)
-        test_exp_X_beta = np.exp(test_X @ self.beta)
-        self.C_beta = np.mean(test_exp_X_beta)
+        """
+        使用外部输入的特征矩阵计算C_beta和alpha
+        """
+        # 使用外部特征矩阵计算C_beta
+        if hasattr(self, 'X') and self.X is not None:
+            print("使用外部特征矩阵计算C_beta...")
+            test_exp_X_beta = np.exp(self.X @ self.beta)
+            self.C_beta = np.mean(test_exp_X_beta)
+            print(f"C_beta = {self.C_beta:.6f} (基于{self.X.shape[0]}个节点)")
+
+        # 估计alpha
         self.alpha, self.C_alpha = self._generate_alpha()
         return
 
-    def _generate_adjacency_matrix(self):
-        # Using less memory
-        np.random.seed(self.seed)
-        Z = np.random.randn(self.N)
-        Z_reshaped1 = Z.reshape(-1, 1)
-        Z_reshaped2 = Z.reshape(1, -1)
-        diag_indices = np.arange(self.N)
+    def _generate_adjacency_matrix(self, adjacency_csv_file, total_nodes=None):
+        """
+        从CSV格式的邻接矩阵文件构建稀疏邻接矩阵
 
-        len_slice = 1000
-        matrix = csr_matrix(
-            np.random.binomial(1, np.exp(-(Z_reshaped1[0:len_slice] - Z_reshaped2) ** 2 / (2 * self.gamma ** 2))))
-        for r in np.arange(int(self.N / len_slice) - 1):
-            row = csr_matrix(np.random.binomial(1, np.exp(
-                -(Z_reshaped1[int(len_slice * (r + 1)):int(len_slice * (r + 2))] - Z_reshaped2) ** 2 / (
-                            2 * self.gamma ** 2))))
-            matrix = vstack([matrix, row])
-        matrix[diag_indices, diag_indices] = 0
-        self.A = matrix
-        return
+        参数:
+        adjacency_csv_file: 邻接矩阵CSV文件路径
+        total_nodes: 总节点数
+
+        返回:
+        A: CSR格式的稀疏邻接矩阵
+        """
+        try:
+            print(f"Reading adjacency matrix from {adjacency_csv_file}...")
+
+            # 跳过第一列（索引列）
+            adj_df = pd.read_csv(adjacency_csv_file, index_col=0)
+            adj_matrix = adj_df.values
+
+            print(f"邻接矩阵形状: {adj_matrix.shape}")
+            print(f"矩阵数据类型: {adj_matrix.dtype}")
+
+            # 使用矩阵的实际大小
+            if total_nodes is None:
+                total_nodes = adj_matrix.shape[0]
+
+            # 转换为稀疏矩阵
+            A = csr_matrix(adj_matrix)
+            A.setdiag(0)  # 移除自环
+            A.eliminate_zeros()
+
+            print(f"最终网络: 节点数={A.shape[0]}, 边数={A.nnz}")
+            print(f"网络密度: {A.nnz / (A.shape[0] * (A.shape[0] - 1)):.8f}")
+
+            self.A = A
+            return
+
+        except Exception as e:
+            print(f"Error building adjacency matrix: {e}")
+            raise
+
+        except Exception as e:
+            print(f"Error building adjacency matrix: {e}")
+            raise
 
     def feature_generation(self, size, seed):
         np.random.seed(self.seed)
