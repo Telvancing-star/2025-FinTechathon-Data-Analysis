@@ -407,36 +407,110 @@ class Pop_NR:
         print(f"计算完成: loss={loss:.6f}, g形状={g.shape}, h形状={h.shape}")
         return loss, g.reshape(-1, 1), h
 
-    def run(self, running_parameter, alpha=1, max_iter=20, epsilon=1e-4):
+    def run(self, running_parameter, alpha=1, max_iter=20, epsilon=1e-6):
         print(f"开始优化，初始参数形状: {running_parameter.shape}")
         running_parameter = np.array(running_parameter).reshape(-1, 1)
         it = 0
         L_old = None
+
+        # 记录收敛历史
+        loss_history = []
+        grad_norm_history = []
+
         while it < max_iter:
             print(f"迭代 {it + 1}/{max_iter}")
             L, g, h = self.loss_grad_hessian(running_parameter)
+            loss_history.append(L)
+            grad_norm_history.append(np.linalg.norm(g))
 
-            # 检查Hessian矩阵是否可逆
+            # 计算条件数（处理奇异矩阵）
             try:
-                h_inv = np.linalg.inv(h)
-            except np.linalg.LinAlgError:
-                print("Hessian矩阵不可逆，使用伪逆")
-                h_inv = np.linalg.pinv(h)
+                cond_number = np.linalg.cond(h)
+                print(f"  损失: {L:.6f}, 梯度范数: {np.linalg.norm(g):.6f}")
+                print(f"  海森矩阵条件数: {cond_number:.2e}")
+            except (np.linalg.LinAlgError, ValueError):
+                print(f"  损失: {L:.6f}, 梯度范数: {np.linalg.norm(g):.6f}")
+                print(f"  海森矩阵条件数: inf (奇异矩阵)")
+                cond_number = np.inf
 
             if L_old is not None:
-                err = abs((L_old - L) / L) if L != 0 else float('inf')
-                print(f"  损失: {L:.6f}, 相对变化: {err:.6f}")
+                err = abs(L_old - L) / (abs(L) + 1e-10)
+                print(f"  相对误差: {err:.6f}")
                 if err < epsilon:
-                    print(f"在迭代 {it + 1} 收敛")
+                    print("收敛!")
                     break
+
             L_old = L
 
-            update = alpha * h_inv @ g
-            running_parameter = running_parameter - update.reshape(-1, 1)
+            # 处理海森矩阵求逆
+            if cond_number > 1e12 or not np.isfinite(cond_number):
+                print("  海森矩阵接近奇异，使用强正则化")
+                reg_strength = 1e-3 * np.eye(h.shape[0])  # 更强的正则化
+                h_safe = h + reg_strength
+                try:
+                    update = alpha * np.linalg.inv(h_safe) @ g
+                except:
+                    print("  正则化求逆失败，使用梯度下降")
+                    update = alpha * g / (np.linalg.norm(g) + 1e-10)
+            else:
+                try:
+                    update = alpha * np.linalg.inv(h) @ g
+                except np.linalg.LinAlgError:
+                    print("  海森矩阵求逆失败，使用正则化")
+                    reg_strength = 1e-6 * np.trace(h) / h.shape[0] * np.eye(h.shape[0])
+                    h_reg = h + reg_strength
+                    update = alpha * np.linalg.inv(h_reg) @ g
+
+            # 检查更新是否合理
+            update_norm = np.linalg.norm(update)
+            if update_norm > 10:  # 更新步长太大
+                print(f"  更新步长过大 ({update_norm:.2f})，进行裁剪")
+                update = update / update_norm * 2  # 限制最大步长为2
+
+            running_parameter = running_parameter - update
+            print(f"  参数更新范数: {np.linalg.norm(update):.6f}")
+
             it += 1
+
+        # 绘制收敛历史
+        self._plot_convergence_history(loss_history, grad_norm_history)
 
         print(f"优化完成，最终参数形状: {running_parameter.shape}")
         return running_parameter
+
+    def _plot_convergence_history(self, loss_history, grad_norm_history):
+        """绘制收敛历史图"""
+        try:
+            import matplotlib.pyplot as plt
+
+            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+
+            # 绘制损失函数历史
+            ax1.plot(loss_history, 'b-o', linewidth=2, markersize=4)
+            ax1.set_xlabel('迭代次数')
+            ax1.set_ylabel('损失函数值')
+            ax1.set_title('Pop_NR 损失函数收敛历史')
+            ax1.grid(True, alpha=0.3)
+            ax1.set_yscale('log')  # 使用对数尺度更好地观察收敛
+
+            # 绘制梯度范数历史
+            ax2.plot(grad_norm_history, 'r-o', linewidth=2, markersize=4)
+            ax2.set_xlabel('迭代次数')
+            ax2.set_ylabel('梯度范数')
+            ax2.set_title('Pop_NR 梯度范数收敛历史')
+            ax2.grid(True, alpha=0.3)
+            ax2.set_yscale('log')  # 使用对数尺度更好地观察收敛
+
+            plt.tight_layout()
+            plt.savefig('pop_nr_convergence_history.png', dpi=300, bbox_inches='tight')
+            plt.close()
+
+            print("收敛历史图已保存为 'pop_nr_convergence_history.png'")
+            print(f"最终损失: {loss_history[-1]:.6f}, 最终梯度范数: {grad_norm_history[-1]:.6f}")
+
+        except ImportError:
+            print("无法绘制收敛历史 (matplotlib 未安装)")
+            print(f"最终损失: {loss_history[-1]:.6f}, 最终梯度范数: {grad_norm_history[-1]:.6f}")
 
 
 # In[9]:
