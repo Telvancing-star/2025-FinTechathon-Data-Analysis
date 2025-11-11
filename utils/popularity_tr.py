@@ -252,7 +252,7 @@ class Pop_NR:
         print(f"  col_prod形状: {self.col_prod.shape}")
 
         # 确保所有维度一致
-        assert self.A.shape[0] == self.A.shape[1] == self.N, f"邻接矩阵A形状{A.shape}与节点数{self.N}不匹配"
+        assert self.A.shape[0] == self.A.shape[1] == self.N, f"邻接矩阵A形状{self.A.shape}与节点数{self.N}不匹配"
         assert len(self.d_in) == self.N, f"入度向量d_in长度{len(self.d_in)}与节点数{self.N}不匹配"
 
     def generate_pi_matrix(self, beta):
@@ -445,17 +445,20 @@ class Pop_NR:
 import itertools
 
 
-def compute_M1_block(exp_block, X_block):
+def compute_M1_block(exp_block, X_block, p=None):
+    if p is None:
+        p = X_block.shape[1]
+
     exp_block = exp_block.reshape(-1, 1)
     permutations = list(itertools.permutations([0, 1, 2, 3]))
-    fm = np.zeros((5, 5))
+    fm = np.zeros((p, p))
     w = np.zeros(12)
-    mtrcs = np.zeros((12, 5, 5))
+    mtrcs = np.zeros((12, p, p))
+
     for perm in permutations:
         exp1 = exp_block[list(perm)]
         X = X_block[list(perm), :]
         vec = exp1 ** 2
-        # pi
         pi = np.sqrt(vec.T / (vec + 2 * vec.T))
         weight_xi = -(1 - 2 * pi ** 2) / (1 - pi)
 
@@ -470,17 +473,17 @@ def compute_M1_block(exp_block, X_block):
         v24 = exp1[1] ** 2 + 2 * exp1[3] ** 2
         v42 = exp1[3] ** 2 + 2 * exp1[1] ** 2
 
-        # exp1 can be seen as gamma after removing exp(alpha_N) (popularity parameter), len(exp1)==4
         # 1,1 2,2
         w1122 = 0.5 * exp1[1] * exp1[2] ** 2 * exp1[3] ** 2 * (
-                    (v23 * v24 - exp1[1] ** 4) ** (-0.5) - (v23 * v24) ** (-0.5))
+                (v23 * v24 - exp1[1] ** 4) ** (-0.5) - (v23 * v24) ** (-0.5))
         w1122 = w1122 * weight_xi[1, 2] * weight_xi[1, 3]
         m1122 = (X[2, :] - X[1, :]).reshape(-1, 1) @ (X[3, :] - X[1, :]).reshape(1, -1)
         m1122 = 0.5 * w1122 * (m1122 + m1122.T)
+
         # 1,1 3,3
         w1133 = 0.5 * (1 - pi[2, 1] - pi[3, 1]) * exp1[1] ** 3 * exp1[2] * exp1[3] * (v32 * v42 - exp1[1] ** 4) ** (
             -0.5) + 0.5 * pi[2, 1] * pi[3, 1] * exp1[1] ** 2 * exp1[2] * exp1[3] * (
-                            2 * exp1[1] ** 2 + exp1[2] ** 2 + exp1[3] ** 2) ** (-0.5)
+                        2 * exp1[1] ** 2 + exp1[2] ** 2 + exp1[3] ** 2) ** (-0.5)
         w1133 = w1133 * weight_xi[2, 1] * weight_xi[3, 1]
         m1133 = (X[1, :] - X[2, :]).reshape(-1, 1) @ (X[1, :] - X[3, :]).reshape(1, -1)
         m1133 = 0.5 * w1133 * (m1133 + m1133.T)
@@ -493,12 +496,12 @@ def compute_M1_block(exp_block, X_block):
 
         # 1,1 2,3
         w1123 = 0.5 * (1 - pi[3, 1]) * exp1[1] ** 2 * exp1[2] ** 2 * exp1[3] * (
-                    (v23 * v42 - exp1[1] ** 4) ** (-0.5) - (v23 * v42) ** (-0.5))
+                (v23 * v42 - exp1[1] ** 4) ** (-0.5) - (v23 * v42) ** (-0.5))
         w1123 = w1123 * weight_xi[1, 2] * weight_xi[3, 1]
         m1123 = (X[2, :] - X[1, :]).reshape(-1, 1) @ (X[1, :] - X[3, :]).reshape(1, -1)
         m1123 = 0.5 * w1123 * (m1123 + m1123.T)
 
-        # 2,2 1,3 
+        # 2,2 1,3
         w2213 = 0.5 * exp1[0] ** 2 * exp1[1] ** 2 * exp1[2] ** 2
         lv2213 = (exp1[0] ** 2 + exp1[1] ** 2) * v13 * v12
         w2213 = w2213 * (lv2213 ** (-0.5) - (lv2213 - exp1[0] ** 4 * v12) ** (-0.5) - (lv2213 - exp1[1] ** 4 * v13) ** (
@@ -509,7 +512,7 @@ def compute_M1_block(exp_block, X_block):
 
         # 3,3 1,2
         w3312 = 0.5 * (1 - pi[2, 0]) * exp1[0] ** 3 * exp1[1] * exp1[2] * (
-                    (v21 * v31 - exp1[0] ** 4) ** (-0.5) - (v21 * v31) ** (-0.5))
+                (v21 * v31 - exp1[0] ** 4) ** (-0.5) - (v21 * v31) ** (-0.5))
         w3312 = w3312 * weight_xi[2, 0] * weight_xi[1, 0]
         m3312 = (X[0, :] - X[2, :]).reshape(-1, 1) @ (X[0, :] - X[1, :]).reshape(1, -1)
         m3312 = 0.5 * w3312 * (m3312 + m3312.T)
@@ -527,9 +530,9 @@ def compute_M1_block(exp_block, X_block):
         w1331 = 0.5 * exp1[0] ** 2 * exp1[1] ** 2 * exp1[2] * exp1[3]
         lv1331 = (exp1[0] ** 2 + exp1[1] ** 2 + exp1[2] ** 2 + exp1[3] ** 2) * v41 * v32
         w1331 = w1331 * (lv1331 ** (-0.5) - (lv1331 - (exp1[1] ** 2 + exp1[2] ** 2) ** 2 * v41) ** (-0.5) - (
-                    lv1331 - (exp1[0] ** 2 + exp1[3] ** 2) ** 2 * v32) ** (-0.5) + (
-                                     lv1331 - (exp1[0] ** 2 + exp1[3] ** 2) ** 2 * v32 - (
-                                         exp1[1] ** 2 + exp1[2] ** 2) ** 2 * v41) ** (-0.5))
+                lv1331 - (exp1[0] ** 2 + exp1[3] ** 2) ** 2 * v32) ** (-0.5) + (
+                                 lv1331 - (exp1[0] ** 2 + exp1[3] ** 2) ** 2 * v32 - (
+                                 exp1[1] ** 2 + exp1[2] ** 2) ** 2 * v41) ** (-0.5))
         w1331 = w1331 * weight_xi[2, 1] * weight_xi[3, 0]
         m1331 = (X[1, :] - X[2, :]).reshape(-1, 1) @ (X[0, :] - X[3, :]).reshape(1, -1)
         m1331 = 0.5 * w1331 * (m1331 + m1331.T)
@@ -545,7 +548,7 @@ def compute_M1_block(exp_block, X_block):
 
         # 1,2 2,3
         w1223 = 0.5 * exp1[0] * exp1[1] ** 2 * exp1[2] ** 2 * (
-                    (v12 * v23 - exp1[1] ** 4) ** (-0.5) - (v12 * v23) ** (-0.5))
+                (v12 * v23 - exp1[1] ** 4) ** (-0.5) - (v12 * v23) ** (-0.5))
         w1223 = w1223 * weight_xi[1, 2] * weight_xi[0, 1]
         m1223 = (X[2, :] - X[1, :]).reshape(-1, 1) @ (X[1, :] - X[0, :]).reshape(1, -1)
         m1223 = 0.5 * w1223 * (m1223 + m1223.T)
@@ -554,8 +557,8 @@ def compute_M1_block(exp_block, X_block):
         w2113 = 0.5 * exp1[0] * exp1[1] ** 2 * exp1[2] ** 2 * exp1[3]
         lv2113 = (exp1[0] ** 2 + exp1[1] ** 2 + exp1[3] ** 2) * v13 * v42
         w2113 = w2113 * (lv2113 ** (-0.5) - (lv2113 - (exp1[1] ** 2 + exp1[3] ** 2) ** 2 * v13) ** (-0.5) - (
-                    lv2113 - exp1[0] ** 4 * v42) ** (-0.5) + (
-                                     lv2113 - (exp1[1] ** 2 + exp1[3] ** 2) ** 2 * v13 - exp1[0] ** 4 * v42) ** (-0.5))
+                lv2113 - exp1[0] ** 4 * v42) ** (-0.5) + (
+                                 lv2113 - (exp1[1] ** 2 + exp1[3] ** 2) ** 2 * v13 - exp1[0] ** 4 * v42) ** (-0.5))
         w2113 = w2113 * weight_xi[0, 2] * weight_xi[3, 1]
         m2113 = (X[2, :] - X[0, :]).reshape(-1, 1) @ (X[1, :] - X[3, :]).reshape(1, -1)
         m2113 = 0.5 * w2113 * (m2113 + m2113.T)
@@ -564,35 +567,39 @@ def compute_M1_block(exp_block, X_block):
         w2331 = 0.5 * exp1[0] ** 3 * exp1[1] ** 2 * exp1[3]
         lv2331 = (exp1[0] ** 2 + exp1[1] ** 2 + exp1[3] ** 2) * v41 * v12
         w2331 = w2331 * (lv2331 ** (-0.5) - (lv2331 - (exp1[0] ** 2 + exp1[3] ** 2) ** 2 * v12) ** (-0.5) - (
-                    lv2331 - exp1[1] ** 4 * v41) ** (-0.5) + (
-                                     lv2331 - (exp1[0] ** 2 + exp1[3] ** 2) ** 2 * v12 - exp1[1] ** 4 * v41) ** (-0.5))
+                lv2331 - exp1[1] ** 4 * v41) ** (-0.5) + (
+                                 lv2331 - (exp1[0] ** 2 + exp1[3] ** 2) ** 2 * v12 - exp1[1] ** 4 * v41) ** (-0.5))
         w2331 = w2331 * weight_xi[0, 1] * weight_xi[3, 0]
         m2331 = (X[1, :] - X[0, :]).reshape(-1, 1) @ (X[0, :] - X[3, :]).reshape(1, -1)
         m2331 = 0.5 * w2331 * (m2331 + m2331.T)
+
         current = m1122 + m1133 + m2233 + 2 * m1123 + 2 * m2213 + 2 * m3312 + m1221 + m1331 + m2332 + 2 * m1223 + 2 * m2113 + 2 * m2331
         w = w + np.array(
             [w1122, w1133, w2233, 2 * w1123, 2 * w2213, 2 * w3312, w1221, w1331, w2332, 2 * w1223, 2 * w2113,
              2 * w2331]).reshape(-1)
         mtrcs = mtrcs + np.array([m1122, m1133, m2233, m1123, m2213, m3312, m1221, m1331, m2332, m1223, m2113, m2331])
         fm = fm + current
+
     return fm / 24, w / 24, mtrcs / 24
 
 
 # In[10]:
 
 
-def compute_M0_block(exp_block, X_block):
+def compute_M0_block(exp_block, X_block, p=None):
+    if p is None:
+        p = X_block.shape[1]
+
     exp_block = exp_block.reshape(-1, 1)
     permutations = list(itertools.permutations([0, 1, 2]))
-    fm = np.zeros((5, 5))
+    fm = np.zeros((p, p))
     w = np.zeros(6)
-    mtrcs = np.zeros((6, 5, 5))
-    fm = np.zeros((5, 5))
+    mtrcs = np.zeros((6, p, p))
+
     for perm in permutations:
         exp1 = exp_block[list(perm)].reshape(-1, 1)
         X = X_block[list(perm), :]
         vec = exp1 ** 2
-        # pi
         pi = np.sqrt(vec.T / (vec + 2 * vec.T))
         weight_xi = (1 - 2 * pi ** 2) / (1 - pi)
 
@@ -600,21 +607,22 @@ def compute_M0_block(exp_block, X_block):
         v21 = exp1[1] ** 2 + 2 * exp1[0] ** 2
         v23 = exp1[1] ** 2 + 2 * exp1[2] ** 2
         v31 = exp1[2] ** 2 + 2 * exp1[0] ** 2
-        # 123 123 
+
+        # 123 123
         w123123 = (1 - 2 * pi[1, 2]) * exp1[1] * exp1[2] ** 2 / np.sqrt(3 * v23) + pi[1, 2] ** 2 * exp1[1] * exp1[
             2] / np.sqrt(3)
         w123123 = w123123 * weight_xi[1, 2] * weight_xi[1, 2]
         m123123 = (X[2, :] - X[1, :]).reshape(-1, 1) @ (X[2, :] - X[1, :]).reshape(1, -1)
         m123123 = 0.5 * w123123 * (m123123 + m123123.T)
 
-        # 123 132 
+        # 123 132
         w123132 = (1 - pi[1, 2]) * (1 - pi[2, 1]) * exp1[1] ** 2 * exp1[2] ** 2 / np.sqrt(
             3 * (exp1[1] ** 2 + exp1[2] ** 2) ** 2 + 3 * exp1[1] ** 2 * exp1[2] ** 2)
         w123132 = w123132 * weight_xi[1, 2] * weight_xi[2, 1]
         m123132 = (X[2, :] - X[1, :]).reshape(-1, 1) @ (X[1, :] - X[2, :]).reshape(1, -1)
         m123132 = 0.5 * w123132 * (m123132 + m123132.T)
 
-        # 123 213 
+        # 123 213
         w123213 = (1 - pi[1, 2]) * (1 - pi[0, 2]) * exp1[0] * exp1[1] * exp1[2] ** 2 / np.sqrt(
             3 * (2 * exp1[1] ** 2 * exp1[2] ** 2 + 2 * exp1[0] ** 2 * exp1[2] ** 2 + exp1[0] ** 2 * exp1[1] ** 2))
         w123213 = w123213 * weight_xi[1, 2] * weight_xi[0, 2]
@@ -648,6 +656,7 @@ def compute_M0_block(exp_block, X_block):
         w123312 = w123312 * weight_xi[0, 1] * weight_xi[1, 2]
         m123312 = (X[1, :] - X[0, :]).reshape(-1, 1) @ (X[2, :] - X[1, :]).reshape(1, -1)
         m123312 = 0.5 * w123312 * (m123312 + m123312.T)
+
         # 123 321
         w123321 = exp1[0] ** 2 * exp1[1] ** 2 * exp1[2] ** 2 / np.sqrt(3)
         vv12 = exp1[0] ** 2 + exp1[1] ** 2
@@ -655,9 +664,9 @@ def compute_M0_block(exp_block, X_block):
         vv13 = exp1[0] ** 2 + exp1[2] ** 2
         l1v123321 = (v23 * v21 * vv12 * vv23) ** (-0.5)
         l2v123321 = (v21 * (vv12 * vv23 * exp1[2] ** 2 + exp1[1] ** 2 * (
-                    exp1[2] ** 2 * v21 + exp1[0] ** 2 * exp1[1] ** 2))) ** (-0.5)
+                exp1[2] ** 2 * v21 + exp1[0] ** 2 * exp1[1] ** 2))) ** (-0.5)
         l3v123321 = (v23 * (vv12 * vv23 * exp1[0] ** 2 + exp1[1] ** 2 * (
-                    exp1[2] ** 2 * v21 + exp1[0] ** 2 * exp1[1] ** 2))) ** (-0.5)
+                exp1[2] ** 2 * v21 + exp1[0] ** 2 * exp1[1] ** 2))) ** (-0.5)
         l4v123321 = (vv12 * vv13 * exp1[1] ** 2 * exp1[2] ** 2 + vv23 * vv13 * exp1[0] ** 2 * exp1[
             1] ** 2 + vv12 * vv23 * exp1[0] ** 2 * exp1[2] ** 2) ** (-0.5)
         w123321 = w123321 * (l1v123321 - l2v123321 - l3v123321 + l4v123321)
@@ -668,6 +677,7 @@ def compute_M0_block(exp_block, X_block):
         w = w + np.array([w123123, w123132, w123213, w123231, w123312, w123321]).reshape(-1)
         mtrcs = mtrcs + np.array([m123123, m123132, m123213, m123231, m123312, m123321])
         fm = fm + m123123 + m123132 + m123213 + m123231 + m123312 + m123321
+
     return fm / 6, w / 6, mtrcs / 6
 
 
@@ -686,7 +696,8 @@ def plugin(data, beta):
     div = data.N * np.sqrt(2) * np.sum(data.A) / ((data.N - 1) * np.sum(ep1))
 
     # estimate H
-    H = np.zeros((data.p, data.p))
+    p = data.X.shape[1]  # 动态获取特征维度
+    H = np.zeros((p, p))
     for i in range(data.N):
         pi_i2i3 = np.sqrt(vec.T / (vec[i] + 2 * vec.T))
         weight_H = (1 - 2 * pi_i2i3 ** 2) * ep1[i] * ep1.reshape(1, -1) / (np.sqrt(3) * (1 - pi_i2i3))
@@ -698,18 +709,18 @@ def plugin(data, beta):
     # estimate M1
     num_blocks1 = int(data.N / 4)
     indices1 = np.array_split(np.arange(data.N), num_blocks1)
-    M1 = np.zeros((data.p, data.p))
+    M1 = np.zeros((p, p))
     for ids in indices1:
-        M1 = M1 + compute_M1_block(ep1[ids], data.X[ids, :])[0]
+        M1 = M1 + compute_M1_block(ep1[ids], data.X[ids, :], p)[0]  # 传入特征维度p
     M1 = M1 / num_blocks1
 
     if data.delta == 0:
         # estimate M0
         num_blocks0 = int(data.N / 3)
         indices0 = np.array_split(np.arange(data.N), num_blocks0)
-        M0 = np.zeros((data.p, data.p))
+        M0 = np.zeros((p, p))
         for ids in indices0:
-            M0 = M0 + compute_M0_block(ep1[ids[0:3]], data.X[ids[0:3], :])[0]
+            M0 = M0 + compute_M0_block(ep1[ids[0:3]], data.X[ids[0:3], :], p)[0]  # 传入特征维度p
         M0 = M0 / num_blocks0
         M = (M1 + M0 / div)
     else:
