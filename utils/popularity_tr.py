@@ -358,16 +358,6 @@ class Pop_NR:
         parameter = np.array(parameter).reshape(-1, 1)
         pi, log_pi, log_pi_minus, const_grad1, const_grad2, const_hes1, const_hes2 = self.generate_pi_matrix(parameter)
 
-        # 添加详细的维度检查
-        print(f"loss_grad_hessian维度检查:")
-        print(f"  A: {self.A.shape}")
-        print(f"  log_pi_minus: {log_pi_minus.shape}")
-        print(f"  d_in: {self.d_in.shape}")
-        print(f"  col_prod: {self.col_prod.shape}")
-
-        # 确保所有矩阵维度一致
-        assert self.A.shape == log_pi_minus.shape, f"A形状{self.A.shape}与log_pi_minus形状{log_pi_minus.shape}不匹配"
-
         # loss function
         print("计算损失函数...")
         l2 = self.A.multiply(log_pi_minus).multiply(self.d_in.reshape(-1, 1))
@@ -384,7 +374,7 @@ class Pop_NR:
         weight_g = -(weight_g1 + weight_g2 + weight_g3)
         g = np.zeros((self.p, 1))
 
-        splits = min(1000, weight_g.nnz)  # 根据非零元素数量调整分割数
+        splits = min(1000, weight_g.nnz)
         if weight_g.nnz > 0:
             zipped_indices = zip(
                 *(np.array_split(weight_g.nonzero()[0], splits),
@@ -392,7 +382,7 @@ class Pop_NR:
             for i_s, j_s in zipped_indices:
                 g += np.sum(weight_g[i_s, j_s] * (self.X[j_s,] - self.X[i_s,]), axis=0).reshape(-1, 1)
 
-        # Hessian
+        # Hessian - 改进的稳健计算
         print("计算Hessian...")
         weight_h1 = self.col_prod.multiply(self.A).multiply(const_hes1)
         weight_h2 = self.A.multiply(self.d_in.reshape(-1, 1)).multiply(const_hes2)
@@ -406,13 +396,49 @@ class Pop_NR:
                 *(np.array_split(weight_h.nonzero()[0], splits),
                   np.array_split(weight_h.nonzero()[1], splits)))
             for i_s, j_s in zipped_indices:
-                h += (self.X[i_s,] - self.X[j_s,]).T @ (
-                        (self.X[i_s,] - self.X[j_s,]) * ((np.array(weight_h[i_s, j_s]).reshape(-1))).reshape(-1, 1))
+                # 稳健的Hessian计算
+                X_diff = self.X[i_s,] - self.X[j_s,]
+                weights = np.array(weight_h[i_s, j_s]).reshape(-1, 1)
 
-        print(f"计算完成: loss={loss:.6f}, g形状={g.shape}, h形状={h.shape}")
-        return loss, g.reshape(-1, 1), h
+                # 避免数值不稳定
+                weights = np.clip(weights, -1e10, 1e10)  # 限制权重范围
+                weights = np.nan_to_num(weights, nan=0.0, posinf=1e10, neginf=-1e10)
 
-    def run(self, running_parameter, alpha=1, max_iter=30, epsilon=1e-7):
+                # 稳健的外积计算
+                outer_prod = X_diff.T @ (X_diff * weights)
+                outer_prod = np.nan_to_num(outer_prod, nan=0.0, posinf=1e10, neginf=-1e10)
+
+                h += outer_prod
+
+        # 确保Hessian对称
+        h = 0.5 * (h + h.T)
+
+        # 添加基础正则化防止奇异
+        h_reg = h + 1e-8 * np.eye(self.p)
+
+        # 检查Hessian性质
+        try:
+            eigvals = np.linalg.eigvalsh(h_reg)
+            min_eigval = np.min(eigvals)
+            max_eigval = np.max(eigvals)
+            cond_number = max_eigval / (min_eigval + 1e-12)
+
+            print(f"Hessian诊断: 最小特征值={min_eigval:.2e}, 最大特征值={max_eigval:.2e}, 条件数={cond_number:.2e}")
+
+            # 如果条件数过大，增强正则化
+            if cond_number > 1e12:
+                print("Hessian条件数过大，增强正则化")
+                reg_strength = max(1e-6, 1e-6 * max_eigval) * np.eye(self.p)
+                h_reg = h + reg_strength
+
+        except np.linalg.LinAlgError:
+            print("Hessian特征值计算失败，使用强正则化")
+            h_reg = h + 1e-4 * np.eye(self.p)
+
+        print(f"计算完成: loss={loss:.6f}, 梯度范数={np.linalg.norm(g):.6f}")
+        return loss, g.reshape(-1, 1), h_reg
+
+    def run(self, running_parameter, alpha=0.01, max_iter=200, epsilon=1e-8):
         print(f"开始优化，初始参数形状: {running_parameter.shape}")
         running_parameter = np.array(running_parameter).reshape(-1, 1)
         it = 0
@@ -421,101 +447,161 @@ class Pop_NR:
         # 记录收敛历史
         loss_history = []
         grad_norm_history = []
+        param_norm_history = [np.linalg.norm(running_parameter)]
+        update_norm_history = []
 
         while it < max_iter:
-            print(f"迭代 {it + 1}/{max_iter}")
+            print(f"\n=== 迭代 {it + 1}/{max_iter} ===")
             L, g, h = self.loss_grad_hessian(running_parameter)
             loss_history.append(L)
-            grad_norm_history.append(np.linalg.norm(g))
+            grad_norm = np.linalg.norm(g)
+            grad_norm_history.append(grad_norm)
 
-            # 计算条件数（处理奇异矩阵）
-            try:
-                cond_number = np.linalg.cond(h)
-                print(f"  损失: {L:.6f}, 梯度范数: {np.linalg.norm(g):.6f}")
-                print(f"  海森矩阵条件数: {cond_number:.2e}")
-            except (np.linalg.LinAlgError, ValueError):
-                print(f"  损失: {L:.6f}, 梯度范数: {np.linalg.norm(g):.6f}")
-                print(f"  海森矩阵条件数: inf (奇异矩阵)")
-                cond_number = np.inf
+            # 详细诊断信息
+            print(f"损失: {L:.8f}")
+            print(f"梯度范数: {grad_norm:.6f}")
+            print(f"参数范数: {param_norm_history[-1]:.6f}")
+            print(f"梯度范围: [{g.min():.6f}, {g.max():.6f}]")
 
+            # 收敛检查
             if L_old is not None:
-                err = abs(L_old - L) / (abs(L) + 1e-10)
-                print(f"  相对误差: {err:.6f}")
-                if err < epsilon:
-                    print("收敛!")
+                rel_change = abs(L_old - L) / (abs(L_old) + 1e-12)
+                print(f"相对变化: {rel_change:.2e}")
+
+                if rel_change < epsilon:
+                    print(f"在迭代 {it + 1} 收敛!")
                     break
+
+                # 检查损失是否发散
+                if L > L_old * 10 and it > 5:  # 损失显著增加
+                    print("警告: 损失显著增加，可能发散")
+                    alpha *= 0.5  # 减小学习率
+                    print(f"调整学习率为: {alpha}")
 
             L_old = L
 
-            # 处理海森矩阵求逆
-            if cond_number > 1e12 or not np.isfinite(cond_number):
-                print("  海森矩阵接近奇异，使用强正则化")
-                reg_strength = 1e-3 * np.eye(h.shape[0])  # 更强的正则化
-                h_safe = h + reg_strength
-                try:
-                    update = alpha * np.linalg.inv(h_safe) @ g
-                except:
-                    print("  正则化求逆失败，使用梯度下降")
-                    update = alpha * g / (np.linalg.norm(g) + 1e-10)
-            else:
-                try:
-                    update = alpha * np.linalg.inv(h) @ g
-                except np.linalg.LinAlgError:
-                    print("  海森矩阵求逆失败，使用正则化")
+            # 稳健的更新计算
+            try:
+                # 计算Hessian条件数
+                cond_number = np.linalg.cond(h)
+                print(f"Hessian条件数: {cond_number:.2e}")
+
+                # 自适应正则化
+                if cond_number > 1e10:
+                    print("使用强正则化")
+                    reg_strength = 1e-4 * np.trace(h) / h.shape[0] * np.eye(h.shape[0])
+                    h_safe = h + reg_strength
+                elif cond_number > 1e6:
+                    print("使用中等正则化")
                     reg_strength = 1e-6 * np.trace(h) / h.shape[0] * np.eye(h.shape[0])
-                    h_reg = h + reg_strength
-                    update = alpha * np.linalg.inv(h_reg) @ g
+                    h_safe = h + reg_strength
+                else:
+                    h_safe = h
 
-            # 检查更新是否合理
+                # 稳健的矩阵求逆
+                try:
+                    h_inv = np.linalg.inv(h_safe)
+                except np.linalg.LinAlgError:
+                    print("矩阵求逆失败，使用伪逆")
+                    h_inv = np.linalg.pinv(h_safe)
+
+                update = alpha * h_inv @ g
+
+            except Exception as e:
+                print(f"Hessian处理失败: {e}，使用梯度下降")
+                # 梯度下降作为备选
+                update = alpha * 0.01 * g / (grad_norm + 1e-12)
+
+            # 自适应步长控制
             update_norm = np.linalg.norm(update)
-            if update_norm > 10:  # 更新步长太大
-                print(f"  更新步长过大 ({update_norm:.2f})，进行裁剪")
-                update = update / update_norm * 2  # 限制最大步长为2
+            update_norm_history.append(update_norm)
+            print(f"更新步长: {update_norm:.6f}")
 
+            # 动态步长调整
+            if update_norm > 1.0:
+                print(f"步长过大 ({update_norm:.2f})，进行裁剪")
+                update = update / update_norm * 0.5
+                alpha *= 0.8  # 减小学习率
+            elif update_norm < 1e-8 and it > 3:
+                print("步长过小，可能已收敛")
+                break
+            elif update_norm < 1e-10:
+                print("步长接近零，停止优化")
+                break
+
+            # 应用更新
             running_parameter = running_parameter - update
-            print(f"  参数更新范数: {np.linalg.norm(update):.6f}")
+            param_norm = np.linalg.norm(running_parameter)
+            param_norm_history.append(param_norm)
+
+            # 参数边界检查
+            if np.any(np.isnan(running_parameter)) or np.any(np.isinf(running_parameter)):
+                print("警告: 参数包含NaN或Inf值，恢复上一步参数")
+                running_parameter = running_parameter + update  # 恢复
+                alpha *= 0.5  # 减小学习率
+                print(f"调整学习率为: {alpha}")
 
             it += 1
 
         # 绘制收敛历史
-        self._plot_convergence_history(loss_history, grad_norm_history)
+        self._plot_detailed_convergence(loss_history, grad_norm_history, param_norm_history, update_norm_history)
 
-        print(f"优化完成，最终参数形状: {running_parameter.shape}")
+        print(f"\n优化完成，共进行 {it} 次迭代")
+        print(f"最终损失: {loss_history[-1]:.8f}")
+        print(f"最终梯度范数: {grad_norm_history[-1]:.6f}")
+        print(f"最终参数范数: {param_norm_history[-1]:.6f}")
+
         return running_parameter
 
-    def _plot_convergence_history(self, loss_history, grad_norm_history):
-        """绘制收敛历史图"""
+    def _plot_detailed_convergence(self, loss_history, grad_norm_history, param_norm_history, update_norm_history):
+        """绘制详细的收敛历史"""
         try:
             import matplotlib.pyplot as plt
 
-            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+            plt.rcParams['font.sans-serif'] = ['SimHei', 'DejaVu Sans']
+            plt.rcParams['axes.unicode_minus'] = False
+            plt.rcParams['mathtext.fontset'] = 'stix'
 
-            # 绘制损失函数历史
+            fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(15, 10))
+
+            # 损失函数
             ax1.plot(loss_history, 'b-o', linewidth=2, markersize=4)
             ax1.set_xlabel('迭代次数')
             ax1.set_ylabel('损失函数值')
-            ax1.set_title('Pop_NR 损失函数收敛历史')
+            ax1.set_title('损失函数收敛历史')
             ax1.grid(True, alpha=0.3)
-            ax1.set_yscale('log')  # 使用对数尺度更好地观察收敛
 
-            # 绘制梯度范数历史
+            # 梯度范数
             ax2.plot(grad_norm_history, 'r-o', linewidth=2, markersize=4)
             ax2.set_xlabel('迭代次数')
             ax2.set_ylabel('梯度范数')
-            ax2.set_title('Pop_NR 梯度范数收敛历史')
+            ax2.set_title('梯度范数收敛历史')
             ax2.grid(True, alpha=0.3)
-            ax2.set_yscale('log')  # 使用对数尺度更好地观察收敛
+            ax2.set_yscale('log')
+
+            # 参数范数
+            ax3.plot(param_norm_history, 'g-o', linewidth=2, markersize=4)
+            ax3.set_xlabel('迭代次数')
+            ax3.set_ylabel('参数范数')
+            ax3.set_title('参数范数变化历史')
+            ax3.grid(True, alpha=0.3)
+
+            # 更新步长
+            ax4.plot(update_norm_history, 'm-o', linewidth=2, markersize=4)
+            ax4.set_xlabel('迭代次数')
+            ax4.set_ylabel('更新步长')
+            ax4.set_title('更新步长变化历史')
+            ax4.grid(True, alpha=0.3)
+            ax4.set_yscale('log')
 
             plt.tight_layout()
-            plt.savefig('pop_nr_convergence_history.png', dpi=300, bbox_inches='tight')
+            plt.savefig('pop_nr_detailed_convergence.png', dpi=300, bbox_inches='tight')
             plt.close()
 
-            print("收敛历史图已保存为 'pop_nr_convergence_history.png'")
-            print(f"最终损失: {loss_history[-1]:.6f}, 最终梯度范数: {grad_norm_history[-1]:.6f}")
+            print("详细收敛历史图已保存为 'pop_nr_detailed_convergence.png'")
 
         except ImportError:
             print("无法绘制收敛历史 (matplotlib 未安装)")
-            print(f"最终损失: {loss_history[-1]:.6f}, 最终梯度范数: {grad_norm_history[-1]:.6f}")
 
 
 # In[9]:

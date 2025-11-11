@@ -14,7 +14,7 @@ from joblib import Parallel, delayed
 from tqdm import tqdm
 
 np.random.seed(42)
-initial_beta = np.random.normal(0, 0.01, 21)  # 21个特征
+initial_beta = np.random.normal(0, 0.1, 21)  # 21个特征
 beta = initial_beta.tolist()  # 转换为list格式
 
 filepath = 'data/Social/compressed_features_expanded.csv'
@@ -88,7 +88,7 @@ for delta in [0.25]:
 import pickle
 
 np.random.seed(42)
-initial_beta = np.random.normal(0, 0.01, 21)
+initial_beta = np.random.normal(0, 0.1, 21)
 beta = initial_beta.tolist()
 C_max = 25
 C_min = 9
