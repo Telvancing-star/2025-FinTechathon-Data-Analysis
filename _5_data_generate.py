@@ -69,7 +69,8 @@ for delta in [0.25]:
     covariance = (estimators.T @ estimators) / B - (
                 estimators.mean(axis=0).reshape(-1, 1) @ estimators.mean(axis=0).reshape(1, -1))
     monte_std = np.sqrt(np.diag(covariance))
-    ARE = np.mean(np.abs((plug_std / monte_std) - 1), axis=0)
+    monte_std_safe = np.where(monte_std == 0, 1e-12, monte_std)
+    ARE = np.mean(np.abs((plug_std / monte_std_safe) - 1), axis=0)
     RMSE = np.sqrt(np.mean((estimators - parameters) ** 2, axis=0))
     std_estimation = np.mean(plug_std, axis=0)
     cover_rate = np.mean(cover, axis=0)
@@ -106,7 +107,8 @@ for delta in [0.25]:
         covariance = (estimators.T @ estimators) / B - (
                     estimators.mean(axis=0).reshape(-1, 1) @ estimators.mean(axis=0).reshape(1, -1))
         monte_std = np.sqrt(np.diag(covariance))
-        ARE = np.mean(np.abs((plug_std / monte_std) - 1), axis=0)
+        monte_std_safe = np.where(monte_std == 0, 1e-12, monte_std)
+        ARE = np.mean(np.abs((plug_std / monte_std_safe) - 1), axis=0)
         RMSE = np.sqrt(np.mean((estimators - parameters) ** 2, axis=0))
         std_estimation = np.mean(plug_std, axis=0)
         cover_rate = np.mean(cover, axis=0)
