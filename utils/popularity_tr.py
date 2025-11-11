@@ -3,11 +3,16 @@
 
 # In[7]:
 
-
 import numpy as np
 from scipy.stats import multivariate_normal
 from scipy.sparse import csr_matrix, vstack
 import pandas as pd
+import matplotlib.pyplot as plt
+
+# 设置中文字体和数学符号
+plt.rcParams['font.sans-serif'] = ['SimHei', 'DejaVu Sans']  # 添加备用字体
+plt.rcParams['axes.unicode_minus'] = False
+plt.rcParams['mathtext.fontset'] = 'stix'  # 使用STIX数学字体
 
 
 class Pop:
@@ -407,7 +412,7 @@ class Pop_NR:
         print(f"计算完成: loss={loss:.6f}, g形状={g.shape}, h形状={h.shape}")
         return loss, g.reshape(-1, 1), h
 
-    def run(self, running_parameter, alpha=1, max_iter=20, epsilon=1e-6):
+    def run(self, running_parameter, alpha=1, max_iter=30, epsilon=1e-7):
         print(f"开始优化，初始参数形状: {running_parameter.shape}")
         running_parameter = np.array(running_parameter).reshape(-1, 1)
         it = 0
@@ -810,7 +815,6 @@ if __name__ == "__main__":
     from joblib import Parallel, delayed
     import pickle
     from tqdm import tqdm
-    import numpy as np
 
     beta = [-0.2, 0.2, -0.1, 0.1, 0]
     C_max = 25
