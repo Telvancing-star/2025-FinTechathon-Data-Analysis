@@ -225,14 +225,6 @@ class Pop:
             print(f"Error building adjacency matrix: {e}")
             raise
 
-    def feature_generation(self, size, seed):
-        np.random.seed(self.seed)
-        rhoX = 0.5
-        meanX = np.zeros(self.p)
-        covX = np.fromfunction(lambda i, j: rhoX ** np.abs(i - j), (self.p, self.p))
-        rvX = multivariate_normal(meanX, covX, self.seed)
-        return rvX.rvs(size)
-
     def _gen_in_degrees(self):
         self.in_degrees = np.array(np.sum(self.A, axis=0))[0]
         return
@@ -462,6 +454,15 @@ class Pop_NR:
             print(f"梯度范数: {grad_norm:.6f}")
             print(f"参数范数: {param_norm_history[-1]:.6f}")
             print(f"梯度范围: [{g.min():.6f}, {g.max():.6f}]")
+
+            if grad_norm > 80000:
+                alpha = 0.8
+            elif grad_norm > 10000:
+                alpha = 0.5
+            elif grad_norm > 1000:
+                alpha = 0.1
+            else:
+                alpha = 0.01
 
             # 收敛检查
             if L_old is not None:
