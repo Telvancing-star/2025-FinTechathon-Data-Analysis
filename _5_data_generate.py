@@ -22,15 +22,19 @@ adjacency_csv_file = './data/Social/adjacency_matrix_origin.csv'
 df = pd.read_csv(filepath)
 
 feature_cols = [f'feature_{i}' for i in range(1, 22)]
-your_X = df[feature_cols].values
-print(f"特征矩阵形状: {your_X.shape}")
+X = df[feature_cols].values
+
+max_row_sum = X.sum(axis=1).max()
+normalized_X = X / max_row_sum
+
+print(f"特征矩阵形状: {X.shape}")
 
 C_max = 25
 C_min = 9
 
 
 def map_fun(b):
-    d = Pop(N, beta, delta, C_min, C_max, N + b + int(10000 * delta), external_X=your_X, adjacency_csv_file=adjacency_csv_file)
+    d = Pop(N, beta, delta, C_min, C_max, N + b + int(10000 * delta), external_X=X, adjacency_csv_file=adjacency_csv_file)
     true_beta = np.array(beta).reshape(-1)
     data_NR = Pop_NR(d)
     np.random.seed(b)  # 每个重复使用不同的随机种子
@@ -46,9 +50,9 @@ def map_fun(b):
 
 B = 1
 Tasks = list(range(B))
-N = your_X.shape[0]
+N = X.shape[0]
 for delta in [0.25]:
-    d0 = Pop(N, beta, delta, C_min, C_max, external_X=your_X, adjacency_csv_file=adjacency_csv_file)
+    d0 = Pop(N, beta, delta, C_min, C_max, external_X=X, adjacency_csv_file=adjacency_csv_file)
     print("N: ", d0.N)
     print("beta shape: ", len(beta))
     print("C_max: ", C_max)
@@ -94,7 +98,7 @@ C_max = 25
 C_min = 9
 for delta in [0.25]:
     B = 1
-    N = your_X.shape[0]
+    N = X.shape[0]
     file_path = f'./data/results{N}delta{int(delta * 100)}.pkl'
 
     with open(file_path, 'rb') as file:
