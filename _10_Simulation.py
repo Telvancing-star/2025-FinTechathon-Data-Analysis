@@ -8,7 +8,7 @@ from utils.popularity_tr import Pop
 
 
 class Diffusion:
-    def __init__(self, target, delta=0.25, xi=0.95, threshold=0.6, num=3, iter=10):
+    def __init__(self, target, delta=0.25, xi=0.93, threshold=0.6, num=3, iter=10):
         self.target = target  # 产品
         self.num = num
         self.iter = iter
@@ -71,25 +71,30 @@ class Diffusion:
         return G, node_investments, edge_data
 
     def _plot_network(self, G, node_investments, edge_data, current_round, new_investments, fig, ax):
-        """绘制网络图 - 椭圆形布局"""
+        """绘制网络图 - 椭圆形内部均匀分布"""
         ax.clear()
 
         # 获取所有节点
         all_nodes = list(G.nodes())
-
-        # 创建椭圆形布局
         n_nodes = len(all_nodes)
+
+        # 创建椭圆形内部的均匀分布
         if n_nodes > 0:
-            # 生成椭圆形的均匀分布点
-            theta = np.linspace(0, 2 * np.pi, n_nodes, endpoint=False)
-            a, b = 1.0, 0.6  # 椭圆的长短轴比例
+            pos = {}
+            a, b = 1.0, 0.6  # 椭圆的长短轴
 
-            # 计算椭圆上的坐标
-            x = a * np.cos(theta)
-            y = b * np.sin(theta)
+            # 方法1: 在椭圆内生成随机均匀分布
+            i = 0
+            while i < n_nodes:
+                # 在矩形区域内生成随机点
+                x = np.random.uniform(-a, a)
+                y = np.random.uniform(-b, b)
 
-            # 创建位置字典
-            pos = {node: (x[i], y[i]) for i, node in enumerate(all_nodes)}
+                # 检查点是否在椭圆内: (x/a)^2 + (y/b)^2 <= 1
+                if (x / a) ** 2 + (y / b) ** 2 <= 1:
+                    pos[all_nodes[i]] = (x, y)
+                    i += 1
+
         else:
             pos = {}
 
@@ -141,17 +146,17 @@ class Diffusion:
             nx.draw_networkx_nodes(G, pos, nodelist=new_nodes,
                                    node_color=new_node_colors, node_size=150, alpha=0.9, ax=ax)
 
-        # 设置坐标轴范围以确保椭圆形状
+        # 设置坐标轴范围
         ax.set_xlim(-1.2, 1.2)
         ax.set_ylim(-0.8, 0.8)
-        ax.set_aspect('equal')  # 保持纵横比
+        ax.set_aspect('equal')
 
         # 添加标题和信息
         ax.set_title(f'Investment Diffusion - Round {current_round}\n'
                      f'Total Investors: {len(G.nodes())}, New Investors: {len(new_investments)}',
                      fontsize=12)
 
-        # 修正图例
+        # 图例
         ax.text(0.02, 0.98, '● Existing Investor (Blue)\n● New Investor (Red)\n→ Propagation Path',
                 transform=ax.transAxes, verticalalignment='top', fontsize=10,
                 bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
@@ -246,14 +251,14 @@ class Diffusion:
         anim = FuncAnimation(fig, update, frames=len(frames), interval=1000, repeat=False)
 
         # 保存动图
-        gif_filename = f'./data/diffusion_animation_{self.target.replace(" ", "_")}.gif'
+        gif_filename = f'./data/gif_1/diffusion_animation_{self.target.replace(" ", "_")}_{self.xi}.gif'
         anim.save(gif_filename, writer='pillow', fps=1)
         print(f"动图已保存到: {gif_filename}")
 
         plt.close()
 
         # 保存到新文件
-        output_filename = f'./data/simulation_results_{self.target.replace(" ", "_")}_{round}.csv'
+        output_filename = f'./data/gif_1/simulation_results_{self.target.replace(" ", "_")}_{round}.csv'
         df.to_csv(output_filename, index=False, encoding='gb18030')
         print(f"模拟结果已保存到: {output_filename}")
 
@@ -262,5 +267,7 @@ class Diffusion:
 
 if __name__ == '__main__':
     terget = 'BHARATIYA JANATA PARTY'
-    run = Diffusion(terget)
-    run.main()
+    # for xi in [0.93, 0.935, 0.94, 0.945]:
+    for xi in range(943, 950):
+        run = Diffusion(terget, xi=xi / 1000)
+        run.main()
