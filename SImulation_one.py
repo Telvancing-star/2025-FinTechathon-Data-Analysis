@@ -1,4 +1,4 @@
-import pickle, math
+import pickle, os
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -165,12 +165,16 @@ class Diffusion:
 
     def main(self):
         data = pd.read_csv('./data/cluster_with_rounds.csv', encoding='gb18030')
-        df = data[data['Name of the Political Party'] == self.target]  # 初始已投资记录, 此时只考虑一个产品
+        df = data[data['Name of the Political Party'] == self.target]
         self.oiter = max(self._get_round(df))
 
         # 准备动画
         fig, ax = plt.subplots(figsize=(12, 8))
         frames = []
+
+        # 创建帧保存目录
+        frame_dir = f'./data/frames_{self.target.replace(" ", "_")}_{self.xi}'
+        os.makedirs(frame_dir, exist_ok=True)
 
         for round in range(self.oiter + 1, self.oiter + self.iter + 1):
 
@@ -237,37 +241,46 @@ class Diffusion:
                     new_rows = pd.DataFrame(new_investments)
                     df = pd.concat([df, new_rows], ignore_index=True)
 
-                # 记录当前轮次的可视化数据
-                frames.append((df.copy(), round, new_investments))
+            # 记录当前轮次的可视化数据
+            frames.append((df.copy(), round, new_investments))
 
-        # 创建动画
+            fig_frame, ax_frame = plt.subplots(figsize=(12, 8))
+            G_frame, node_investments_frame, edge_data_frame = self._create_network_graph(df, round, new_investments)
+            self._plot_network(G_frame, node_investments_frame, edge_data_frame, round, new_investments, fig_frame,
+                               ax_frame)
+
+            frame_filename = f'round_{round}.png'
+            fig_frame.savefig(os.path.join(frame_dir, frame_filename), dpi=150, bbox_inches='tight')
+            plt.close(fig_frame)
+            print(f"帧已保存: {frame_filename}")
+
+        # [原有的动画代码保持不变...]
         def update(frame_idx):
             df_frame, round, new_investments = frames[frame_idx]
             G, node_investments, edge_data = self._create_network_graph(df_frame, round, new_investments)
             self._plot_network(G, node_investments, edge_data, round, new_investments, fig, ax)
             return ax
 
-        # 生成动画
         anim = FuncAnimation(fig, update, frames=len(frames), interval=1000, repeat=False)
-
-        # 保存动图
-        gif_filename = f'./data/gif_1/diffusion_animation_{self.target.replace(" ", "_")}_{self.xi}_{round}.gif'
+        gif_filename = frame_dir + f'/diffusion_animation_{self.target.replace(" ", "_")}_{self.xi}_{round}.gif'
         anim.save(gif_filename, writer='pillow', fps=1)
         print(f"动图已保存到: {gif_filename}")
 
         plt.close()
 
         # 保存到新文件
-        output_filename = f'./data/gif_1/simulation_results_{self.target.replace(" ", "_")}_{round}.csv'
+        output_filename = frame_dir + f'/simulation_results_{self.target.replace(" ", "_")}_{round}.csv'
         df.to_csv(output_filename, index=False, encoding='gb18030')
         print(f"模拟结果已保存到: {output_filename}")
+
+        print(f"所有帧图像已保存到: {frame_dir}")
 
         return df
 
 
 if __name__ == '__main__':
-    terget = 'BHARATIYA JANATA PARTY'
+    terget = 'ALL INDIA TRINAMOOL CONGRESS'
     # for xi in [0.93, 0.935, 0.94, 0.945]:
-    for xi in range(943, 950):
-        run = Diffusion(terget, xi=xi / 1000, iter=15)
+    for xi in [0.95, 0.955]:
+        run = Diffusion(terget, xi=xi, iter=15)
         run.main()
