@@ -27,10 +27,10 @@ def build_adjacency_dict_efficient(csv_file_path):
 
 
 # 使用示例
-file_path = '../data/Social/adjacency_matrix_origin.csv'
+file_path = './data/Social/adjacency_matrix_origin.csv'
 adj_dict = build_adjacency_dict_efficient(file_path)
 
-with open('../data/Social/adj_neighbor.pkl', 'wb') as f:  # 注意是'rb'二进制读取模式
+with open('./data/Social/adj_neighbor.pkl', 'wb') as f:  # 注意是'wb'二进制写入模式
     pickle.dump(adj_dict, f)
 
 # 查看结果

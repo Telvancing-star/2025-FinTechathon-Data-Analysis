@@ -4,11 +4,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 import networkx as nx
 from matplotlib.animation import FuncAnimation
-from _5_data_generate import CompatibleData
+from utils.popularity_tr import Pop
 
 
 class Diffusion:
-    def __init__(self, target, xi=0.95, threshold=0.6, num=3, iter=10):
+    def __init__(self, target, delta=0.25, xi=0.95, threshold=0.6, num=3, iter=10):
         self.target = target  # 产品
         self.num = num
         self.iter = iter
@@ -17,10 +17,7 @@ class Diffusion:
         self.a = 0.6
         self.c = 0.4
         self.investment = {}
-
-        # 从pkl文件读取对象
-        with open('./data/Social/compatible_data.pkl', 'rb') as f:  # 注意是'rb'二进制读取模式
-            self.data = pickle.load(f)
+        self.delta = delta
 
         with open('./data/Social/adj_neighbor.pkl', 'rb') as f:  # 注意是'rb'二进制读取模式
             self.neighbor = pickle.load(f)
@@ -74,19 +71,34 @@ class Diffusion:
         return G, node_investments, edge_data
 
     def _plot_network(self, G, node_investments, edge_data, current_round, new_investments, fig, ax):
-        """绘制网络图"""
+        """绘制网络图 - 椭圆形布局"""
         ax.clear()
 
-        # 设置布局
-        pos = nx.spring_layout(G, k=1, iterations=50)
+        # 获取所有节点
+        all_nodes = list(G.nodes())
 
-        # 准备节点颜色（根据投资金额）- 确保顺序与G.nodes()一致
+        # 创建椭圆形布局
+        n_nodes = len(all_nodes)
+        if n_nodes > 0:
+            # 生成椭圆形的均匀分布点
+            theta = np.linspace(0, 2 * np.pi, n_nodes, endpoint=False)
+            a, b = 1.0, 0.6  # 椭圆的长短轴比例
+
+            # 计算椭圆上的坐标
+            x = a * np.cos(theta)
+            y = b * np.sin(theta)
+
+            # 创建位置字典
+            pos = {node: (x[i], y[i]) for i, node in enumerate(all_nodes)}
+        else:
+            pos = {}
+
+        # 准备节点颜色（根据投资金额）
         node_colors = []
-        for node in G.nodes():
+        for node in all_nodes:
             if node in node_investments:
                 node_colors.append(node_investments[node])
             else:
-                # 如果节点没有投资记录，使用默认值
                 node_colors.append(0)
 
         # 归一化颜色值用于着色
@@ -95,17 +107,23 @@ class Diffusion:
                                  for color in node_colors]
             colors = [plt.cm.Blues(val) for val in normalized_colors]
         else:
-            colors = ['lightblue'] * len(G.nodes())
+            colors = ['lightblue'] * len(all_nodes)
 
         # 绘制边
         new_edges = [(u, v) for u, v, style in edge_data if style == 'new']
+        existing_edges = [(u, v) for u, v, style in edge_data if style != 'new']
+
+        # 绘制现有边（灰色）
+        if existing_edges:
+            nx.draw_networkx_edges(G, pos, edgelist=existing_edges,
+                                   edge_color='gray', width=1, alpha=0.5, arrows=True, ax=ax)
 
         # 绘制新传播边（红色高亮）
-        nx.draw_networkx_edges(G, pos, edgelist=new_edges,
-                               edge_color='red', width=2, alpha=0.8, arrows=True, ax=ax)
+        if new_edges:
+            nx.draw_networkx_edges(G, pos, edgelist=new_edges,
+                                   edge_color='red', width=2, alpha=0.8, arrows=True, ax=ax)
 
         # 分离现有节点和新节点
-        all_nodes = list(G.nodes())
         new_nodes = [inv['对应的local_node_id'] for inv in new_investments]
         existing_nodes = [node for node in all_nodes if node not in new_nodes]
 
@@ -122,6 +140,11 @@ class Diffusion:
         if new_nodes:
             nx.draw_networkx_nodes(G, pos, nodelist=new_nodes,
                                    node_color=new_node_colors, node_size=150, alpha=0.9, ax=ax)
+
+        # 设置坐标轴范围以确保椭圆形状
+        ax.set_xlim(-1.2, 1.2)
+        ax.set_ylim(-0.8, 0.8)
+        ax.set_aspect('equal')  # 保持纵横比
 
         # 添加标题和信息
         ax.set_title(f'Investment Diffusion - Round {current_round}\n'
@@ -184,7 +207,7 @@ class Diffusion:
 
                         # 计算该轮次的衰减后概率, 更新投资概率
                         adjusted_prob = self.P[potential_investor] * self.xi ** trail
-                        invest_prob += adjusted_prob * n_trials ** (1 - self.data.delta)
+                        invest_prob += adjusted_prob * n_trials ** (1 - self.delta)
 
                         # 进行该轮次的伯努利试验
                         round_bernoulli_results = np.random.binomial(1, adjusted_prob, n_trials)
