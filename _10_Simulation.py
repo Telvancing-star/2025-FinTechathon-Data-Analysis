@@ -180,7 +180,7 @@ class Diffusion:
                         round_value = float(round_name) if isinstance(round_name, str) else round_name
                         trail = round - round_value
 
-                        n_trials = round_group.shape[0]  # 获取该轮次的记录数, 也就是有
+                        n_trials = round_group.shape[0]  # 获取该轮次的记录数, 也就是这一轮有多少影响到当前潜在投资者的已投资者
 
                         # 计算该轮次的衰减后概率, 更新投资概率
                         adjusted_prob = self.P[potential_investor] * self.xi ** trail

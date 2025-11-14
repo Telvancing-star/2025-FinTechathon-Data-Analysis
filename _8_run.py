@@ -1,9 +1,12 @@
 
-import numpy as np
 from scipy import stats
 from utils.plugin import plugin_my
+import numpy as np
+import pandas as pd
 import pickle
-from _5_data_generate import CompatibleData
+from utils.popularity_tr import Pop
+from sklearn.preprocessing import StandardScaler
+from _6_calculate import create_compatible_pop_instance
 
 
 def debug_pop_nr_internals(estimator, beta):
@@ -73,8 +76,8 @@ def run_complete_tr_pipeline_fixed_v2(data, beta, output_file='results_tr.pkl'):
     reference_std = np.abs(beta_hat) * 0.15  # 假设的参考标准差
     ARE = np.mean(np.abs((est_std / (reference_std + 1e-10)) - 1))
 
-    # RMSE - 由于我们不知道真实参数，使用初始值作为参考
-    RMSE = np.sqrt(np.mean((beta_hat - initial_beta) ** 2))
+    # # RMSE - 由于我们不知道真实参数，使用初始值作为参考
+    # RMSE = np.sqrt(np.mean((beta_hat - initial_beta) ** 2))
 
     # 覆盖率 - 对于单次运行，我们无法计算经验覆盖率
     # 改为计算置信区间的宽度作为质量指标
@@ -93,7 +96,7 @@ def run_complete_tr_pipeline_fixed_v2(data, beta, output_file='results_tr.pkl'):
         'beta_hat': beta_hat,
         'est_std': est_std,
         'cov_matrix': cov,
-        'RMSE': RMSE,
+        # 'RMSE': RMSE,
         'ARE': ARE,
         'avg_confidence_interval_width': avg_ci_width,
         'p_values': p_values,
@@ -118,7 +121,7 @@ def run_complete_tr_pipeline_fixed_v2(data, beta, output_file='results_tr.pkl'):
     print(f"特征维度 p: {data.p}")
     print(f"网络密度参数 delta: {data.delta}")
     print(f"总边数: {data.A.sum()}")
-    print(f"RMSE (相对于初始值): {RMSE:.6f}")
+    # print(f"RMSE (相对于初始值): {RMSE:.6f}")
     print(f"ARE (标准差质量): {ARE:.6f}")
     print(f"平均置信区间宽度: {avg_ci_width:.6f}")
     print(f"显著参数数量 (p < 0.05): {significant_params}/{len(beta_hat)}")
@@ -134,15 +137,20 @@ def run_complete_tr_pipeline_fixed_v2(data, beta, output_file='results_tr.pkl'):
 
 if __name__ == "__main__":
     # 从pkl文件读取对象
-    with open('./data/Social/compatible_data.pkl', 'rb') as f:  # 注意是'rb'二进制读取模式
-        compatible_data = pickle.load(f)
+    file_path = f'./data/results4171delta25.pkl'
+    adjacency_csv_file = './data/Social/adjacency_matrix_origin.csv'
+    df = pd.read_csv('./data/Social/compressed_features_expanded.csv')
 
-    with open('./data/Social/beta.pkl', 'rb') as f:  # 注意是'rb'二进制读取模式
-        beta = pickle.load(f)
+    feature_cols = [f'feature_{i}' for i in range(1, 22)]
+    X_or = df[feature_cols].values
+
+    scaler = StandardScaler()
+    X = scaler.fit_transform(X_or)
+    pop_instance = create_compatible_pop_instance(file_path, external_X=X, adjacency_csv_file=adjacency_csv_file)
 
     results = run_complete_tr_pipeline_fixed_v2(
-        data=compatible_data,
-        beta=beta,
+        data=pop_instance,
+        beta=pop_instance.beta,
         output_file='./data/Social/facebook_tr_results.pkl'
     )
 

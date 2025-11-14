@@ -359,8 +359,8 @@ class Pop_NR:
         pi, log_pi, log_pi_minus, const_grad1, const_grad2, const_hes1, const_hes2 = self.generate_pi_matrix(parameter)
 
         # 归一化因子（与损失函数一致）
-        # normalization_factor = self.N * (self.N - 1) * (self.N - 2)
-        normalization_factor = self.A.nnz
+        normalization_factor = self.N * (self.N - 1)
+        # normalization_factor = self.A.nnz
 
         print(f"使用归一化因子: {normalization_factor}")
 
