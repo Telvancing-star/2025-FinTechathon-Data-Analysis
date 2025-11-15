@@ -9,13 +9,12 @@ from collections import defaultdict
 
 
 class Diffusion:
-    def __init__(self, target, target_score, effect_strength, alpha=0.3, beta=0.1, xi=0.8, threshold=0.6,
+    def __init__(self, target, target_score, effect_strength, alpha=0.3, beta=0.05, xi=0.8, threshold=0.6,
                  iter=10):
         self.target = target  # 产品
         self.target_score = target_score
         self.effect_strength = effect_strength
         self.iter = iter
-        self.alpha, self.beta, self.xi, self.base_mu = alpha, beta, xi, 0.01
         self.threshold = threshold
         self.a = 0.5  # 投资金额计算参数：源节点投资权重
         self.b = 0.1  # 投资金额计算参数：邻居节点投资权重
@@ -29,6 +28,8 @@ class Diffusion:
             results = pickle.load(f)
         self.beta_hat = results['beta_hat']
         self.P = results['P_edge']
+        self.alpha, self.beta, self.xi, self.base_mu = alpha, beta, xi, float(np.mean(self.P))
+        print(self.base_mu)
 
         # 存储每轮的可视化数据
         self.visualization_data = []
@@ -329,12 +330,12 @@ class Diffusion:
 
         # 新投资者基础倾向
         if invested_rounds_count == 0:
-            base_mu = self.base_mu  # 固定的新投资者基础倾向
+            weighted_mu = 0  # 固定的新投资者基础倾向
         else:
-            base_mu = self.base_mu + self.alpha * log_frequency  # 0.1-0.4之间
+            weighted_mu = self.alpha * log_frequency  # 0.1-0.4之间
 
         # 温和的金额权重
-        weighted_mu = base_mu + self.beta * investment_weight
+        weighted_mu += self.beta * investment_weight
 
         return np.clip(weighted_mu, self.base_mu, 0.5)
 
@@ -348,7 +349,7 @@ class Diffusion:
 
         weighted_mu = self._calculate_weighted_mu(potential_investor, df, current_round)
         # 计算sigma^2（与加权mu相关）
-        sigma_squared = (weighted_mu ** 2) / 10.0 if weighted_mu > 0 else 0.01
+        sigma_squared = (weighted_mu ** 2) / 10.0
 
         # 生成个性化基准投资倾向
         baseline_tendency = self.base_mu + np.random.normal(weighted_mu, np.sqrt(sigma_squared))
