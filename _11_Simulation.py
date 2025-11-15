@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import networkx as nx
 from matplotlib.animation import FuncAnimation
+from _10_Party_Evaluation import compute_target_scores
 from utils.popularity_tr import Pop
 from collections import defaultdict
 
@@ -288,16 +289,50 @@ class Diffusion:
                 axes[i].axvline(mean_val - std_val, color='orange', linestyle=':')
                 axes[i].legend()
 
-        # 第六个图：变量随时间变化
+        # 第六个图：变量随时间变化，高亮显示超过阈值的点
         if len(axes) > 5:
             rounds = self.analysis_data['rounds']
-            for var, label in zip(['final_probability', 'invest_prob'], ['投资概率', '传播概率']):
-                axes[5].scatter(rounds, self.analysis_data[var], alpha=0.6, label=label, s=20)
+            final_probs = self.analysis_data['final_probability']
+            invest_probs = self.analysis_data['invest_prob']
+
+            # 分离超过阈值和未超过阈值的点
+            final_above_threshold = [prob >= self.threshold for prob in final_probs]
+            final_below_threshold = [prob < self.threshold for prob in final_probs]
+
+            # 绘制投资概率（最终概率）
+            # 超过阈值的点 - 红色
+            axes[5].scatter(
+                [r for r, above in zip(rounds, final_above_threshold) if above],
+                [p for p, above in zip(final_probs, final_above_threshold) if above],
+                alpha=0.8, color='red', label=f'投资概率≥{self.threshold}', s=25, marker='o'
+            )
+            # 未超过阈值的点 - 蓝色
+            axes[5].scatter(
+                [r for r, below in zip(rounds, final_below_threshold) if below],
+                [p for p, below in zip(final_probs, final_below_threshold) if below],
+                alpha=0.6, color='blue', label=f'投资概率<{self.threshold}', s=20, marker='o'
+            )
+
+            # 绘制传播概率（invest_prob）
+            axes[5].scatter(rounds, invest_probs, alpha=0.4, color='green', label='传播概率', s=15, marker='^')
+
+            # 添加阈值线
+            axes[5].axhline(y=self.threshold, color='red', linestyle='--', alpha=0.7,
+                            label=f'阈值 ({self.threshold})')
+
             axes[5].set_xlabel('轮次')
             axes[5].set_ylabel('概率值')
-            axes[5].set_title('概率随时间变化')
+            axes[5].set_title(f'概率随时间变化 (阈值: {self.threshold})')
             axes[5].legend()
             axes[5].grid(True, alpha=0.3)
+
+            # 添加统计信息
+            above_count = sum(final_above_threshold)
+            total_count = len(final_probs)
+            above_ratio = above_count / total_count if total_count > 0 else 0
+            axes[5].text(0.02, 0.98, f'超过阈值: {above_count}/{total_count} ({above_ratio:.1%})',
+                         transform=axes[5].transAxes, verticalalignment='top',
+                         bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
 
         plt.tight_layout()
         analysis_plot_path = os.path.join(output_dir, 'variable_analysis.png')
@@ -514,7 +549,12 @@ class Diffusion:
 
 if __name__ == '__main__':
     terget = 'BHARATIYA JANATA PARTY'
-    target_score = [-0.4, 0.2]
+    # BHARATIYA JANATA PARTY 的权重矩阵
+    A = [+1, +1, +1, -1, -1]
+    B = [+1, -1, -1, +1, -1]
+    C = [+1, +1, +1, -1, +1]
+    D = [-1, -1, +1, +1, +1]
+    results, target_score = compute_target_scores(A, B, C, D)
     effect_strength = [0.6, 0.4]
 
     run = Diffusion(terget, target_score=target_score, effect_strength=effect_strength, iter=15)
