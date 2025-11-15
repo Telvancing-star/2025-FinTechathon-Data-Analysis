@@ -9,7 +9,7 @@ from collections import defaultdict
 
 
 class Diffusion:
-    def __init__(self, target, target_score, effect_strength, alpha=0.8, beta=0.5, xi=0.75, threshold=0.6,
+    def __init__(self, target, target_score, effect_strength, alpha=0.3, beta=0.1, xi=0.8, threshold=0.6,
                  iter=10):
         self.target = target  # 产品
         self.target_score = target_score
@@ -269,7 +269,7 @@ class Diffusion:
         axes = axes.flatten()
 
         variables = ['weighted_mu', 'invest_prob', 'baseline_tendency', 'effect', 'final_probability']
-        titles = ['加权Mu', '投资概率', '基准倾向', '产品效应', '最终概率']
+        titles = ['加权Mu', '传播概率', '基准倾向', '产品效应', '投资概率']
 
         for i, (var, title) in enumerate(zip(variables, titles)):
             if i < len(axes):
@@ -290,7 +290,7 @@ class Diffusion:
         # 第六个图：变量随时间变化
         if len(axes) > 5:
             rounds = self.analysis_data['rounds']
-            for var, label in zip(['final_probability', 'invest_prob'], ['最终概率', '投资概率']):
+            for var, label in zip(['final_probability', 'invest_prob'], ['投资概率', '传播概率']):
                 axes[5].scatter(rounds, self.analysis_data[var], alpha=0.6, label=label, s=20)
             axes[5].set_xlabel('轮次')
             axes[5].set_ylabel('概率值')
@@ -311,7 +311,7 @@ class Diffusion:
         investor_history = df[df['对应的local_node_id'] == potential_investor]
         invested_rounds_count = len(investor_history)
 
-        # 投资频率（使用对数变换避免极端值）
+        # 传播频率（使用对数变换避免极端值）
         if current_round > 0 and invested_rounds_count > 0:
             raw_frequency = invested_rounds_count / (current_round + invested_rounds_count)
             # 对数变换：压缩极端值，保持中间区域的敏感性
@@ -331,10 +331,10 @@ class Diffusion:
         if invested_rounds_count == 0:
             base_mu = self.base_mu  # 固定的新投资者基础倾向
         else:
-            base_mu = self.base_mu + 0.3 * log_frequency  # 0.1-0.4之间
+            base_mu = self.base_mu + self.alpha * log_frequency  # 0.1-0.4之间
 
         # 温和的金额权重
-        weighted_mu = base_mu + 0.1 * investment_weight
+        weighted_mu = base_mu + self.beta * investment_weight
 
         return np.clip(weighted_mu, self.base_mu, 0.5)
 
@@ -413,7 +413,7 @@ class Diffusion:
         # 调试信息（抽样输出，避免过多日志）
         if np.random.random() < 0.05:  # 5%的概率输出调试信息
             print(f"轮次{current_round} - 节点{potential_investor}({investor_type}): "
-                  f"最终概率={final_probability:.3f}, 投资概率={invest_prob:.3f}")
+                  f"投资概率={final_probability:.3f}, 传播概率={invest_prob:.3f}")
 
         return final_probability, all_bernoulli_results
 
@@ -431,7 +431,6 @@ class Diffusion:
         os.makedirs(frame_dir, exist_ok=True)
 
         for current_round in range(self.oiter + 1, self.oiter + self.iter + 1):
-            # ... [现有的主循环代码保持不变] ...
             records = df[df['Round'] < current_round]
             self.investment = dict(zip(records['对应的local_node_id'], records['Denominations']))
             self.mean = records['Denominations'].mean()
@@ -485,7 +484,6 @@ class Diffusion:
             plt.close(fig_frame)
             print(f"帧已保存: {frame_filename}")
 
-        # ... [现有的动画和保存代码保持不变] ...
         def update(frame_idx):
             df_frame, current_round, new_investments = frames[frame_idx]
             G, node_investments, edge_data = self._create_network_graph(df_frame, current_round, new_investments)
@@ -518,6 +516,6 @@ if __name__ == '__main__':
     target_score = [0.1, 0.2]
     effect_strength = [0.6, 0.4]
 
-    for xi in [0.81, 0.82]:
+    for xi in [0.8, 0.81, 0.82]:
         run = Diffusion(terget, target_score=target_score, effect_strength=effect_strength, xi=xi, iter=15)
         run.main()
