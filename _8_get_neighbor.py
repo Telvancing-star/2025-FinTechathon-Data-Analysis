@@ -156,9 +156,9 @@ class GetPath:
         self.save_distance_matrix(distance_matrix, node_index_map, output_path)
 
         # 示例查询
-        sample_nodes = list(adjacency_dict.keys())[:3]  # 取前3个节点作为示例
+        sample_nodes = list(self.adjacency_dict.keys())[:3]  # 取前3个节点作为示例
         if len(sample_nodes) >= 2:
-            dist = Getpath.get_shortest_distance(distance_matrix, node_index_map, sample_nodes[0], sample_nodes[1])
+            dist = self.get_shortest_distance(distance_matrix, node_index_map, sample_nodes[0], sample_nodes[1])
             print(f"\n示例查询: {sample_nodes[0]} -> {sample_nodes[1]} = {dist}")
 
         # 验证结果

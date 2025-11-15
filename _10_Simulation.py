@@ -24,7 +24,8 @@ class Diffusion:
         self.iter = iter
         self.xi = xi  # 衰减系数：控制历史影响的衰减速度
         self.threshold = threshold  # 投资决策阈值
-        self.a = 0.6  # 投资金额计算参数：源节点投资权重
+        self.a = 0.5  # 投资金额计算参数：源节点投资权重
+        self.b = 0.1  # 投资金额计算参数：邻居节点投资权重
         self.c = 0.4  # 投资金额计算参数：平均投资权重
         self.investment = {}  # 存储节点投资金额的字典
         self.delta = delta  # 网络稀疏参数
@@ -47,7 +48,7 @@ class Diffusion:
         计算新投资者的投资金额
 
         基于源节点投资金额和平均投资金额的加权组合
-        公式: a * source_investment + c * mean_investment
+        公式: a * source_investment + b * neighbor_investment + c * mean_investment
 
         参数:
         source_node: 传播源节点
@@ -55,7 +56,15 @@ class Diffusion:
         返回:
         新投资者的投资金额
         """
-        return self.a * self.investment[source_node] + self.c * self.mean
+        neighbor_investment, cnt = 0, 0
+
+        for neighbor in self.neighbor[source_node]:
+            cnt += 1
+            if neighbor in self.investment:
+                neighbor_investment += self.investment[neighbor]
+        neighbor_investment /= cnt if cnt > 0 else 1  # 防止除零
+
+        return self.a * self.investment[source_node] + self.b * neighbor_investment + self.c * self.mean
 
     def _get_round(self, df):
         """
