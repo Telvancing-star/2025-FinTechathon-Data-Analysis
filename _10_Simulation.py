@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import networkx as nx
 from matplotlib.animation import FuncAnimation
 from utils.popularity_tr import Pop
+from collections import defaultdict
 
 
 class Diffusion:
@@ -21,16 +22,27 @@ class Diffusion:
         self.c = 0.4  # 投资金额计算参数：平均投资权重
         self.investment = {}
 
-        with open('./data/Social/adj_neighbor.pkl', 'rb') as f:  # 注意是'rb'二进制读取模式
+        with open('./data/Social/adj_neighbor.pkl', 'rb') as f:
             self.neighbor = pickle.load(f)
 
-        with open('./data/Social/edge_probability_matrix.pkl', 'rb') as f:  # 注意是'rb'二进制读取模式
+        with open('./data/Social/edge_probability_matrix.pkl', 'rb') as f:
             results = pickle.load(f)
         self.beta_hat = results['beta_hat']
         self.P = results['P_edge']
 
         # 存储每轮的可视化数据
         self.visualization_data = []
+
+        # === 新增：统计分析数据结构 ===
+        self.analysis_data = {
+            'weighted_mu': [],
+            'invest_prob': [],
+            'baseline_tendency': [],
+            'effect': [],
+            'final_probability': [],
+            'rounds': [],
+            'investor_types': []  # 'new' 或 'existing'
+        }
 
     def _investment(self, source_node):
         """
@@ -185,6 +197,113 @@ class Diffusion:
 
         ax.set_axis_off()
 
+    def _record_analysis_data(self, weighted_mu, invest_prob, baseline_tendency, effect,
+                              final_probability, current_round, investor_type):
+        """记录分析数据"""
+        self.analysis_data['weighted_mu'].append(weighted_mu)
+        self.analysis_data['invest_prob'].append(invest_prob)
+        self.analysis_data['baseline_tendency'].append(baseline_tendency)
+        self.analysis_data['effect'].append(effect)
+        self.analysis_data['final_probability'].append(final_probability)
+        self.analysis_data['rounds'].append(current_round)
+        self.analysis_data['investor_types'].append(investor_type)
+
+    def _calculate_statistics(self, data_list):
+        """计算均值和标准差"""
+        if not data_list:
+            return 0, 0
+        data_array = np.array(data_list)
+        return np.mean(data_array), np.std(data_array)
+
+    def _analyze_variables(self):
+        """分析所有变量的统计特性"""
+        print("\n" + "=" * 60)
+        print("变量统计分析报告")
+        print("=" * 60)
+
+        # 整体统计
+        variables = ['weighted_mu', 'invest_prob', 'baseline_tendency', 'effect', 'final_probability']
+        for var in variables:
+            mean_val, std_val = self._calculate_statistics(self.analysis_data[var])
+            print(
+                f"{var:20} 均值: {mean_val:8.4f} 标准差: {std_val:8.4f} 变异系数: {std_val / max(mean_val, 0.001):8.4f}")
+
+        # 按投资者类型分析
+        print("\n--- 按投资者类型分析 ---")
+        for investor_type in ['new', 'existing']:
+            indices = [i for i, t in enumerate(self.analysis_data['investor_types']) if t == investor_type]
+            if indices:
+                print(f"\n{investor_type.upper()}投资者:")
+                for var in variables:
+                    values = [self.analysis_data[var][i] for i in indices]
+                    mean_val, std_val = self._calculate_statistics(values)
+                    print(f"  {var:18} 均值: {mean_val:6.4f} 标准差: {std_val:6.4f}")
+
+        # 按轮次分析
+        print("\n--- 按轮次趋势分析 ---")
+        rounds = sorted(set(self.analysis_data['rounds']))
+        if rounds:
+            print("轮次趋势 (均值):")
+            for var in ['final_probability', 'invest_prob']:
+                round_means = []
+                for r in rounds:
+                    indices = [i for i, round_val in enumerate(self.analysis_data['rounds']) if round_val == r]
+                    if indices:
+                        values = [self.analysis_data[var][i] for i in indices]
+                        round_means.append(np.mean(values))
+                    else:
+                        round_means.append(0)
+
+                # 计算趋势
+                if len(round_means) > 1:
+                    trend = np.polyfit(range(len(round_means)), round_means, 1)[0]
+                    trend_direction = "上升" if trend > 0.001 else "下降" if trend < -0.001 else "平稳"
+                    print(f"  {var:18} 趋势: {trend:7.4f} ({trend_direction})")
+
+    def _plot_variable_analysis(self, output_dir):
+        """绘制变量分析图"""
+        if not self.analysis_data['rounds']:
+            return
+
+        fig, axes = plt.subplots(2, 3, figsize=(18, 12))
+        axes = axes.flatten()
+
+        variables = ['weighted_mu', 'invest_prob', 'baseline_tendency', 'effect', 'final_probability']
+        titles = ['加权Mu', '投资概率', '基准倾向', '产品效应', '最终概率']
+
+        for i, (var, title) in enumerate(zip(variables, titles)):
+            if i < len(axes):
+                # 直方图
+                axes[i].hist(self.analysis_data[var], bins=20, alpha=0.7, color='skyblue', edgecolor='black')
+                axes[i].set_xlabel(title)
+                axes[i].set_ylabel('频数')
+                axes[i].set_title(f'{title}分布')
+                axes[i].grid(True, alpha=0.3)
+
+                # 添加统计信息
+                mean_val, std_val = self._calculate_statistics(self.analysis_data[var])
+                axes[i].axvline(mean_val, color='red', linestyle='--', label=f'均值: {mean_val:.3f}')
+                axes[i].axvline(mean_val + std_val, color='orange', linestyle=':', label=f'±1标准差')
+                axes[i].axvline(mean_val - std_val, color='orange', linestyle=':')
+                axes[i].legend()
+
+        # 第六个图：变量随时间变化
+        if len(axes) > 5:
+            rounds = self.analysis_data['rounds']
+            for var, label in zip(['final_probability', 'invest_prob'], ['最终概率', '投资概率']):
+                axes[5].scatter(rounds, self.analysis_data[var], alpha=0.6, label=label, s=20)
+            axes[5].set_xlabel('轮次')
+            axes[5].set_ylabel('概率值')
+            axes[5].set_title('概率随时间变化')
+            axes[5].legend()
+            axes[5].grid(True, alpha=0.3)
+
+        plt.tight_layout()
+        analysis_plot_path = os.path.join(output_dir, 'variable_analysis.png')
+        plt.savefig(analysis_plot_path, dpi=300, bbox_inches='tight')
+        plt.close()
+        print(f"变量分析图已保存: {analysis_plot_path}")
+
     def _calculate_weighted_mu(self, potential_investor, df, current_round):
         """
         使用对数变换处理极端值，更稳定的加权mu计算
@@ -216,7 +335,6 @@ class Diffusion:
 
         # 温和的金额权重
         weighted_mu = base_mu + 0.1 * investment_weight
-        print("weighted_mu:", weighted_mu)
 
         return np.clip(weighted_mu, self.base_mu, 0.5)
 
@@ -228,23 +346,6 @@ class Diffusion:
         previous_round_records = df[df['Round'] == current_round - 1]
         previously_invested = potential_investor in previous_round_records['对应的local_node_id'].values
 
-        # # 计算个性化的基准投资倾向（考虑投资金额）
-        # investor_history = df[df['对应的local_node_id'] == potential_investor]
-        # invested_rounds_count = len(investor_history)
-        #
-        # # 计算加权mu：考虑投资金额的轮次比例
-        # if current_round > 0 and len(investor_history) > 0:
-        #     # 计算平均投资金额（归一化）
-        #     avg_investment = investor_history['Denominations'].mean()
-        #     max_investment = df['Denominations'].max() if len(df) > 0 else 1.0
-        #     investment_weight = avg_investment / max_investment
-        #
-        #     # 基础mu + 投资金额权重
-        #     base_mu = self.alpha * invested_rounds_count / (current_round + invested_rounds_count)
-        #     weighted_mu = base_mu * (1 + self.beta * investment_weight) / (1 + self.beta)  # 投资金额大的用户倾向更高
-        # else:
-        #     weighted_mu = 0.0
-
         weighted_mu = self._calculate_weighted_mu(potential_investor, df, current_round)
         # 计算sigma^2（与加权mu相关）
         sigma_squared = (weighted_mu ** 2) / 10.0 if weighted_mu > 0 else 0.01
@@ -255,13 +356,16 @@ class Diffusion:
 
         if previously_invested:
             product_effect, effect_strength = self.target_score[0], self.effect_strength[0]
+            investor_type = 'existing'
         else:
             product_effect, effect_strength = self.target_score[1], self.effect_strength[1]
+            investor_type = 'new'
+
+        effect_value = product_effect * effect_strength
 
         # === 新增：不投资行为传播逻辑 ===
         investment_interruption_effect = 0.0
         if current_round >= 2:
-            # 检查a-2轮有投资，但a-1轮没有投资
             round_a_minus_2_records = df[df['Round'] == current_round - 2]
             round_a_minus_1_records = df[df['Round'] == current_round - 1]
 
@@ -269,7 +373,6 @@ class Diffusion:
             invested_at_a_minus_1 = potential_investor in round_a_minus_1_records['对应的local_node_id'].values
 
             if invested_at_a_minus_2 and not invested_at_a_minus_1:
-                # 检测到投资中断：a-2轮投资了，但a-1轮没投资
                 interruption_noise = np.random.normal(weighted_mu / 2, np.sqrt(sigma_squared / 4))
                 investment_interruption_effect = -abs(interruption_noise)
 
@@ -279,14 +382,14 @@ class Diffusion:
         for round_name, round_group in grouped:
             round_value = float(round_name) if isinstance(round_name, str) else round_name
             trail = current_round - round_value
-            n_trials = round_group.shape[0]  # 本轮对该投资者产生影响的投资者个数
+            n_trials = round_group.shape[0]
 
             # 基础adjusted_prob计算
             adjusted_prob = self.P[potential_investor] * self.xi ** trail
 
             # === 应用不投资行为传播效应 ===
-            adjusted_prob += investment_interruption_effect  # <0
-            adjusted_prob = max(0, adjusted_prob)  # 确保概率不小于0
+            adjusted_prob += investment_interruption_effect
+            adjusted_prob = max(0, adjusted_prob)
 
             invest_prob += adjusted_prob * n_trials
 
@@ -298,14 +401,19 @@ class Diffusion:
         total_influence = (
                 invest_prob +
                 baseline_tendency +
-                product_effect * effect_strength
+                effect_value
         )
 
         final_probability = 1 / (1 + np.exp(-total_influence))
-        print("invest_prob:", invest_prob)
-        print("baseline_tendency:", baseline_tendency)
-        print("effect:", product_effect * effect_strength)
-        print("final_probability:", final_probability)
+
+        # === 新增：记录分析数据 ===
+        self._record_analysis_data(weighted_mu, invest_prob, baseline_tendency,
+                                   effect_value, final_probability, current_round, investor_type)
+
+        # 调试信息（抽样输出，避免过多日志）
+        if np.random.random() < 0.05:  # 5%的概率输出调试信息
+            print(f"轮次{current_round} - 节点{potential_investor}({investor_type}): "
+                  f"最终概率={final_probability:.3f}, 投资概率={invest_prob:.3f}")
 
         return final_probability, all_bernoulli_results
 
@@ -323,37 +431,33 @@ class Diffusion:
         os.makedirs(frame_dir, exist_ok=True)
 
         for current_round in range(self.oiter + 1, self.oiter + self.iter + 1):
-
-            records = df[df['Round'] < current_round]  # 获取本轮存在的投资记录
+            # ... [现有的主循环代码保持不变] ...
+            records = df[df['Round'] < current_round]
             self.investment = dict(zip(records['对应的local_node_id'], records['Denominations']))
             self.mean = records['Denominations'].mean()
-            nodes = records['对应的local_node_id'].unique()  # 获取本轮之前存在的已有投资者
+            nodes = records['对应的local_node_id'].unique()
 
-            if len(nodes) == 0:  # 若本轮没有投资者
-                # 记录空帧
+            if len(nodes) == 0:
                 frames.append((df, current_round, []))
                 continue
             else:
-                # 获取所有邻居并合并, 这些是本轮的潜在投资对象
                 all_neighbors = set()
                 for node in nodes:
                     if node in self.neighbor:
                         all_neighbors.update(self.neighbor[node])
 
-                # 在循环外部收集新投资者
                 new_investments = []
 
                 for potential_investor in all_neighbors:
-                    spread_nodes = [node for node in self.neighbor[potential_investor] if node in nodes]  # 找到潜在传播者
+                    spread_nodes = [node for node in self.neighbor[potential_investor] if node in nodes]
                     if not spread_nodes:
                         continue
-                    spread_record = records[records['对应的local_node_id'].isin(spread_nodes)]  # 找到潜在传播记录
-                    grouped = spread_record.groupby('Round')  # 按已投资者的投资发生轮次分组
+                    spread_record = records[records['对应的local_node_id'].isin(spread_nodes)]
+                    grouped = spread_record.groupby('Round')
                     invest_prob, all_bernoulli_results = self._calculate_investment_decision(potential_investor, df,
                                                                                              grouped, current_round)
 
                     if np.any(all_bernoulli_results) and invest_prob >= self.threshold:
-                        # 收集新投资信息，稍后统一添加到df
                         source_node = np.random.choice(spread_record['对应的local_node_id'])
                         new_investments.append({
                             'Name of the Political Party': self.target,
@@ -364,26 +468,24 @@ class Diffusion:
                             'Journal Date': '/'
                         })
 
-                # 在循环外部统一更新df
                 if new_investments:
                     new_rows = pd.DataFrame(new_investments)
                     df = pd.concat([df, new_rows], ignore_index=True)
 
-            # 记录当前轮次的可视化数据
             frames.append((df.copy(), current_round, new_investments))
 
+            # 保存帧图像
             fig_frame, ax_frame = plt.subplots(figsize=(12, 8))
             G_frame, node_investments_frame, edge_data_frame = self._create_network_graph(df, current_round,
                                                                                           new_investments)
             self._plot_network(G_frame, node_investments_frame, edge_data_frame, current_round, new_investments,
-                               fig_frame,
-                               ax_frame)
-
+                               fig_frame, ax_frame)
             frame_filename = f'round_{current_round}.png'
             fig_frame.savefig(os.path.join(frame_dir, frame_filename), dpi=150, bbox_inches='tight')
             plt.close(fig_frame)
             print(f"帧已保存: {frame_filename}")
 
+        # ... [现有的动画和保存代码保持不变] ...
         def update(frame_idx):
             df_frame, current_round, new_investments = frames[frame_idx]
             G, node_investments, edge_data = self._create_network_graph(df_frame, current_round, new_investments)
@@ -402,6 +504,10 @@ class Diffusion:
         df.to_csv(output_filename, index=False, encoding='gb18030')
         print(f"模拟结果已保存到: {output_filename}")
 
+        # === 新增：执行变量分析 ===
+        self._analyze_variables()
+        self._plot_variable_analysis(frame_dir)
+
         print(f"所有帧图像已保存到: {frame_dir}")
 
         return df
@@ -409,10 +515,9 @@ class Diffusion:
 
 if __name__ == '__main__':
     terget = 'BHARATIYA JANATA PARTY'
-    target_score = [0.1, 0.2]  # 产品: [使已投资的人仍然想投资, 使未投资的人想投资] 的得分(-1~1)
-    effect_strength = [0.6, 0.4]  # 产品得分的影响系数
+    target_score = [0.1, 0.2]
+    effect_strength = [0.6, 0.4]
 
-    # for xi in [0.93, 0.935, 0.94, 0.945]:
     for xi in [0.81, 0.82]:
         run = Diffusion(terget, target_score=target_score, effect_strength=effect_strength, xi=xi, iter=15)
         run.main()
