@@ -513,9 +513,8 @@ class Diffusion:
 
 if __name__ == '__main__':
     terget = 'BHARATIYA JANATA PARTY'
-    target_score = [0.1, 0.2]
+    target_score = [-0.4, 0.2]
     effect_strength = [0.6, 0.4]
 
-    for xi in [0.8, 0.81, 0.82]:
-        run = Diffusion(terget, target_score=target_score, effect_strength=effect_strength, xi=xi, iter=15)
-        run.main()
+    run = Diffusion(terget, target_score=target_score, effect_strength=effect_strength, iter=15)
+    run.main()
