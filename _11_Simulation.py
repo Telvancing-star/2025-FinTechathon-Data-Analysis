@@ -10,7 +10,7 @@ from collections import defaultdict
 
 
 class Diffusion:
-    def __init__(self, target, target_score, effect_strength, alpha=0.3, beta=0.05, xi=0.8, threshold=0.6,
+    def __init__(self, target, target_score, effect_strength, alpha=0.3, beta=0.05, xi=0.8, threshold=0.7,
                  iter=10):
         self.target = target  # 产品
         self.target_score = target_score
@@ -30,7 +30,6 @@ class Diffusion:
         self.beta_hat = results['beta_hat']
         self.P = results['P_edge']
         self.alpha, self.beta, self.xi, self.base_mu = alpha, beta, xi, float(np.mean(self.P))
-        print(self.base_mu)
 
         # 存储每轮的可视化数据
         self.visualization_data = []
@@ -310,11 +309,11 @@ class Diffusion:
             axes[5].scatter(
                 [r for r, below in zip(rounds, final_below_threshold) if below],
                 [p for p, below in zip(final_probs, final_below_threshold) if below],
-                alpha=0.6, color='blue', label=f'投资概率<{self.threshold}', s=20, marker='o'
+                alpha=0.6, color='skyblue', label=f'投资概率<{self.threshold}', s=20, marker='o'
             )
 
             # 绘制传播概率（invest_prob）
-            axes[5].scatter(rounds, invest_probs, alpha=0.4, color='green', label='传播概率', s=15, marker='^')
+            axes[5].scatter(rounds, invest_probs, alpha=0.4, color='yellow', label='传播概率', s=15, marker='^')
 
             # 添加阈值线
             axes[5].axhline(y=self.threshold, color='red', linestyle='--', alpha=0.7,
