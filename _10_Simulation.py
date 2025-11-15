@@ -377,14 +377,14 @@ class Diffusion:
         anim = FuncAnimation(fig, update, frames=len(frames), interval=1000, repeat=False)
 
         # 保存动图
-        gif_filename = f'./data/gif_1/diffusion_animation_{self.target.replace(" ", "_")}_{self.xi}_{current_round}.gif'
+        gif_filename = f'./output/gif/diffusion_animation_{self.target.replace(" ", "_")}_{self.xi}_{current_round}.gif'
         anim.save(gif_filename, writer='pillow', fps=1)
         print(f"动图已保存到: {gif_filename}")
 
         plt.close()
 
         # 保存仿真结果到CSV文件
-        output_filename = f'./data/gif_1/simulation_results_{self.target.replace(" ", "_")}_{current_round}.csv'
+        output_filename = f'./output/gif/simulation_results_{self.target.replace(" ", "_")}_{current_round}.csv'
         df.to_csv(output_filename, index=False, encoding='gb18030')
         print(f"模拟结果已保存到: {output_filename}")
 

@@ -257,7 +257,7 @@ class Diffusion:
         frames = []
 
         # 创建帧保存目录
-        frame_dir = f'./data/frames_{self.target.replace(" ", "_")}_{self.xi}'
+        frame_dir = f'./output/frames_{self.target.replace(" ", "_")}_{self.xi}'
         os.makedirs(frame_dir, exist_ok=True)
 
         for current_round in range(self.oiter + 1, self.oiter + self.iter + 1):
