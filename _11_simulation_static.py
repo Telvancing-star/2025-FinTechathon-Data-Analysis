@@ -8,12 +8,13 @@ from utils.popularity_tr import Pop
 
 
 class Diffusion:
-    def __init__(self, target, target_score, effect_strength, delta=0.25, xi=0.75, threshold=0.6, iter=10):
+    def __init__(self, target, target_score, effect_strength, delta=0.25, alpha=0.8, beta=0.5, xi=0.75, threshold=0.6,
+                 iter=10):
         self.target = target  # 产品
         self.target_score = target_score
         self.effect_strength = effect_strength
         self.iter = iter
-        self.xi = xi
+        self.alpha, self.beta, self.xi, self.base_mu = alpha, beta, xi, 0.01
         self.threshold = threshold
         self.a = 0.5  # 投资金额计算参数：源节点投资权重
         self.b = 0.1  # 投资金额计算参数：邻居节点投资权重
@@ -185,6 +186,41 @@ class Diffusion:
 
         ax.set_axis_off()
 
+    def _calculate_weighted_mu(self, potential_investor, df, current_round):
+        """
+        使用对数变换处理极端值，更稳定的加权mu计算
+        """
+        investor_history = df[df['对应的local_node_id'] == potential_investor]
+        invested_rounds_count = len(investor_history)
+
+        # 投资频率（使用对数变换避免极端值）
+        if current_round > 0 and invested_rounds_count > 0:
+            raw_frequency = invested_rounds_count / (current_round + invested_rounds_count)
+            # 对数变换：压缩极端值，保持中间区域的敏感性
+            log_frequency = np.log1p(raw_frequency * 10) / np.log1p(10)  # 映射到0-1
+        else:
+            log_frequency = 0.0
+
+        # 投资金额影响
+        if len(investor_history) > 0:
+            avg_investment = investor_history['Denominations'].mean()
+            max_investment = df['Denominations'].max() if len(df) > 0 else 1.0
+            investment_weight = avg_investment / max_investment
+        else:
+            investment_weight = 0.0
+
+        # 新投资者基础倾向
+        if invested_rounds_count == 0:
+            base_mu = self.base_mu  # 固定的新投资者基础倾向
+        else:
+            base_mu = self.base_mu + 0.3 * log_frequency  # 0.1-0.4之间
+
+        # 温和的金额权重
+        weighted_mu = base_mu + 0.1 * investment_weight
+        print("weighted_mu:", weighted_mu)
+
+        return np.clip(weighted_mu, self.base_mu, 0.5)
+
     def _calculate_investment_decision(self, potential_investor, df, grouped, current_round):
         """
         考虑投资金额的个性化基准倾向，增加不投资行为传播逻辑
@@ -193,29 +229,31 @@ class Diffusion:
         previous_round_records = df[df['Round'] == current_round - 1]
         previously_invested = potential_investor in previous_round_records['对应的local_node_id'].values
 
-        # 计算个性化的基准投资倾向（考虑投资金额）
-        investor_history = df[df['对应的local_node_id'] == potential_investor]
-        invested_rounds_count = len(investor_history)
+        # # 计算个性化的基准投资倾向（考虑投资金额）
+        # investor_history = df[df['对应的local_node_id'] == potential_investor]
+        # invested_rounds_count = len(investor_history)
+        #
+        # # 计算加权mu：考虑投资金额的轮次比例
+        # if current_round > 0 and len(investor_history) > 0:
+        #     # 计算平均投资金额（归一化）
+        #     avg_investment = investor_history['Denominations'].mean()
+        #     max_investment = df['Denominations'].max() if len(df) > 0 else 1.0
+        #     investment_weight = avg_investment / max_investment
+        #
+        #     # 基础mu + 投资金额权重
+        #     base_mu = self.alpha * invested_rounds_count / (current_round + invested_rounds_count)
+        #     weighted_mu = base_mu * (1 + self.beta * investment_weight) / (1 + self.beta)  # 投资金额大的用户倾向更高
+        # else:
+        #     weighted_mu = 0.0
 
-        # 计算加权mu：考虑投资金额的轮次比例
-        if current_round > 0 and len(investor_history) > 0:
-            # 计算平均投资金额（归一化）
-            avg_investment = investor_history['Denominations'].mean()
-            max_investment = df['Denominations'].max() if len(df) > 0 else 1.0
-            investment_weight = avg_investment / max_investment
-
-            # 基础mu + 投资金额权重
-            base_mu = invested_rounds_count / (current_round + invested_rounds_count)
-            weighted_mu = base_mu * (1 + 0.5 * investment_weight)  # 投资金额大的用户倾向更高
-        else:
-            weighted_mu = 0.0
-
+        weighted_mu = self._calculate_weighted_mu(potential_investor, df, current_round)
         # 计算sigma^2（与加权mu相关）
         sigma_squared = (weighted_mu ** 2) / 10.0 if weighted_mu > 0 else 0.01
 
         # 生成个性化基准投资倾向
         baseline_tendency = 0.1 + np.random.normal(weighted_mu, np.sqrt(sigma_squared))
         baseline_tendency = np.clip(baseline_tendency, 0.01, 0.5)
+        print("baseline_tendency:", baseline_tendency)
 
         if previously_invested:
             product_effect, effect_strength = self.target_score[0], self.effect_strength[0]
@@ -368,7 +406,7 @@ class Diffusion:
 
 
 if __name__ == '__main__':
-    terget = 'BHARATIYA JANATA PARTY'
+    terget = 'ALL INDIA TRINAMOOL CONGRESS'
     target_score = [0.1, 0.2]  # 产品: [使已投资的人仍然想投资, 使未投资的人想投资] 的得分(-1~1)
     effect_strength = [0.6, 0.4]  # 产品得分的影响系数
 
