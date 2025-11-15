@@ -8,9 +8,10 @@ from utils.popularity_tr import Pop
 
 
 class Diffusion:
-    def __init__(self, target, target_score, delta=0.25, xi=0.75, threshold=0.6, iter=10):
+    def __init__(self, target, target_score, effect_strength, delta=0.25, xi=0.75, threshold=0.6, iter=10):
         self.target = target  # 产品
         self.target_score = target_score
+        self.effect_strength = effect_strength
         self.iter = iter
         self.xi = xi
         self.threshold = threshold
@@ -231,11 +232,9 @@ class Diffusion:
         baseline_tendency = np.clip(baseline_tendency, 0.01, 0.5)
 
         if previously_invested:
-            product_effect = self.target_score[0]
-            effect_strength = 0.6
+            product_effect, effect_strength = self.target_score[0], self.effect_strength[0]
         else:
-            product_effect = self.target_score[1]
-            effect_strength = 0.3
+            product_effect, effect_strength = self.target_score[1], self.effect_strength[1]
 
         # 综合计算
         total_influence = (
@@ -312,8 +311,10 @@ class Diffusion:
             frames.append((df.copy(), current_round, new_investments))
 
             fig_frame, ax_frame = plt.subplots(figsize=(12, 8))
-            G_frame, node_investments_frame, edge_data_frame = self._create_network_graph(df, current_round, new_investments)
-            self._plot_network(G_frame, node_investments_frame, edge_data_frame, current_round, new_investments, fig_frame,
+            G_frame, node_investments_frame, edge_data_frame = self._create_network_graph(df, current_round,
+                                                                                          new_investments)
+            self._plot_network(G_frame, node_investments_frame, edge_data_frame, current_round, new_investments,
+                               fig_frame,
                                ax_frame)
 
             frame_filename = f'round_{current_round}.png'
@@ -347,7 +348,9 @@ class Diffusion:
 if __name__ == '__main__':
     terget = 'BHARATIYA JANATA PARTY'
     target_score = [0.1, 0.2]  # 产品: [使已投资的人仍然想投资, 使未投资的人想投资] 的得分(-1~1)
+    effect_strength = [0.6, 0.4]  # 产品得分的影响系数
+
     # for xi in [0.93, 0.935, 0.94, 0.945]:
-    for xi in [0.7, 0.72]:
-        run = Diffusion(terget, target_score=target_score, xi=xi, iter=15)
+    for xi in [0.7, 0.72, 0.75]:
+        run = Diffusion(terget, target_score=target_score, effect_strength=effect_strength, xi=xi, iter=15)
         run.main()
