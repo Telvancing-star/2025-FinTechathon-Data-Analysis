@@ -19,10 +19,10 @@ class Diffusion:
         self.investment = {}
         self.delta = delta
 
-        with open('./data/Social/adj_neighbor.pkl', 'rb') as f:  # 注意是'rb'二进制读取模式
+        with open('../data/Social/adj_neighbor.pkl', 'rb') as f:  # 注意是'rb'二进制读取模式
             self.neighbor = pickle.load(f)
 
-        with open('./data/Social/edge_probability_matrix.pkl', 'rb') as f:  # 注意是'rb'二进制读取模式
+        with open('../data/Social/edge_probability_matrix.pkl', 'rb') as f:  # 注意是'rb'二进制读取模式
             results = pickle.load(f)
         self.beta_hat = results['beta_hat']
         self.P = results['P_edge']
@@ -164,7 +164,7 @@ class Diffusion:
         ax.set_axis_off()
 
     def main(self):
-        data = pd.read_csv('./data/cluster_with_rounds.csv', encoding='gb18030')
+        data = pd.read_csv('../data/cluster_with_rounds.csv', encoding='gb18030')
         df = data[data['Name of the Political Party'] == self.target]
         self.oiter = max(self._get_round(df))
 
@@ -254,7 +254,6 @@ class Diffusion:
             plt.close(fig_frame)
             print(f"帧已保存: {frame_filename}")
 
-        # [原有的动画代码保持不变...]
         def update(frame_idx):
             df_frame, round, new_investments = frames[frame_idx]
             G, node_investments, edge_data = self._create_network_graph(df_frame, round, new_investments)
