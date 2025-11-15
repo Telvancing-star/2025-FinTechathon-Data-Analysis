@@ -8,7 +8,7 @@ from utils.popularity_tr import Pop
 
 
 class Diffusion:
-    def __init__(self, target, delta=0.25, xi=0.93, threshold=0.6, iter=10):
+    def __init__(self, target, target_score, delta=0.25, xi=0.93, threshold=0.6, iter=10):
         """
         初始化扩散模型
 
@@ -20,6 +20,7 @@ class Diffusion:
         iter: 仿真迭代轮次
         """
         self.target = target  # 产品/政党名称
+        self.target_score = target_score
         self.iter = iter
         self.xi = xi  # 衰减系数：控制历史影响的衰减速度
         self.threshold = threshold  # 投资决策阈值
@@ -340,7 +341,8 @@ if __name__ == '__main__':
     对不同的衰减系数xi进行参数敏感性分析
     """
     terget = 'BHARATIYA JANATA PARTY'
+    target_score = [0.1, 0.2]  # 产品: [使已投资的人仍然想投资, 使未投资的人想投资] 的得分(-1~1)
     # 参数扫描：测试不同的衰减系数
     for xi in range(943, 950):
-        run = Diffusion(terget, xi=xi / 1000, iter=15)
+        run = Diffusion(terget, target_score=target_score, xi=xi / 1000, iter=15)
         run.main()
