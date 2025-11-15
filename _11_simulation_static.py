@@ -187,22 +187,8 @@ class Diffusion:
 
     def _calculate_investment_decision(self, potential_investor, df, grouped, current_round):
         """
-        考虑投资金额的个性化基准倾向
+        考虑投资金额的个性化基准倾向，增加不投资行为传播逻辑
         """
-        # 原有的概率计算
-        invest_prob = 0
-        all_bernoulli_results = []
-        for round_name, round_group in grouped:
-            round_value = float(round_name) if isinstance(round_name, str) else round_name
-            trail = current_round - round_value
-            n_trials = round_group.shape[0]
-            adjusted_prob = self.P[potential_investor] * self.xi ** trail
-            invest_prob += adjusted_prob * n_trials ** (1 - self.delta)
-
-            # 进行该轮次的伯努利试验（模拟投资决策）
-            round_bernoulli_results = np.random.binomial(1, adjusted_prob, n_trials)
-            all_bernoulli_results.extend(round_bernoulli_results)
-
         # 检查投资状态
         previous_round_records = df[df['Round'] == current_round - 1]
         previously_invested = potential_investor in previous_round_records['对应的local_node_id'].values
@@ -227,7 +213,7 @@ class Diffusion:
         # 计算sigma^2（与加权mu相关）
         sigma_squared = (weighted_mu ** 2) / 10.0 if weighted_mu > 0 else 0.01
 
-        # 生成个性化基准倾向
+        # 生成个性化基准投资倾向
         baseline_tendency = 0.1 + np.random.normal(weighted_mu, np.sqrt(sigma_squared))
         baseline_tendency = np.clip(baseline_tendency, 0.01, 0.5)
 
@@ -235,6 +221,42 @@ class Diffusion:
             product_effect, effect_strength = self.target_score[0], self.effect_strength[0]
         else:
             product_effect, effect_strength = self.target_score[1], self.effect_strength[1]
+
+        # === 新增：不投资行为传播逻辑 ===
+        investment_interruption_effect = 0.0
+        if current_round >= 2:
+            # 检查a-2轮有投资，但a-1轮没有投资
+            round_a_minus_2_records = df[df['Round'] == current_round - 2]
+            round_a_minus_1_records = df[df['Round'] == current_round - 1]
+
+            invested_at_a_minus_2 = potential_investor in round_a_minus_2_records['对应的local_node_id'].values
+            invested_at_a_minus_1 = potential_investor in round_a_minus_1_records['对应的local_node_id'].values
+
+            if invested_at_a_minus_2 and not invested_at_a_minus_1:
+                # 检测到投资中断：a-2轮投资了，但a-1轮没投资
+                interruption_noise = np.random.normal(weighted_mu / 2, np.sqrt(sigma_squared / 4))
+                investment_interruption_effect = -abs(interruption_noise)
+
+        # 原有的概率计算
+        invest_prob = 0
+        all_bernoulli_results = []
+        for round_name, round_group in grouped:
+            round_value = float(round_name) if isinstance(round_name, str) else round_name
+            trail = current_round - round_value
+            n_trials = round_group.shape[0]
+
+            # 基础adjusted_prob计算
+            adjusted_prob = self.P[potential_investor] * self.xi ** trail
+
+            # === 应用不投资行为传播效应 ===
+            adjusted_prob += investment_interruption_effect  # <0
+            adjusted_prob = max(0, adjusted_prob)  # 确保概率不小于0
+
+            invest_prob += adjusted_prob * n_trials ** (1 - self.delta)
+
+            # 进行该轮次的伯努利试验（模拟投资决策）
+            round_bernoulli_results = np.random.binomial(1, adjusted_prob, n_trials)
+            all_bernoulli_results.extend(round_bernoulli_results)
 
         # 综合计算
         total_influence = (
@@ -351,6 +373,6 @@ if __name__ == '__main__':
     effect_strength = [0.6, 0.4]  # 产品得分的影响系数
 
     # for xi in [0.93, 0.935, 0.94, 0.945]:
-    for xi in [0.7, 0.72, 0.75]:
+    for xi in [0.8, 0.81, 0.82]:
         run = Diffusion(terget, target_score=target_score, effect_strength=effect_strength, xi=xi, iter=15)
         run.main()
