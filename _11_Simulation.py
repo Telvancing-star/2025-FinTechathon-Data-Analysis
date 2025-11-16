@@ -10,7 +10,7 @@ from collections import defaultdict
 
 
 class Diffusion:
-    def __init__(self, target, target_score, effect_strength, alpha=0.4, bta=0.05, xi=0.9, threshold=0.75,
+    def __init__(self, target, target_score, effect_strength, alpha=0.2, beta=0.05, xi=0.85, threshold=0.75,
                  iter=10):
         self.target = target  # 产品
         self.target_score = target_score
@@ -192,8 +192,15 @@ class Diffusion:
                      fontsize=12)
 
         # 图例
-        ax.text(0.02, 0.98, '● Existing Investor (Blue)\n● New Investor (Red)\n→ Propagation Path',
-                transform=ax.transAxes, verticalalignment='top', fontsize=10,
+        legend_text = (f'● 现有投资者 (蓝色)\n'
+                       f'● 新投资者 (红色)\n'
+                       f'→ 传播路径\n'
+                       f'产品效应强度:\n'
+                       f'  现有投资者: {self.effect_strength[0]:.3f}\n'
+                       f'  新投资者: {self.effect_strength[1]:.3f}')
+
+        ax.text(0.02, 0.98, legend_text,
+                transform=ax.transAxes, verticalalignment='top', fontsize=9,
                 bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
 
         ax.set_axis_off()
@@ -366,12 +373,12 @@ class Diffusion:
         if invested_rounds_count == 0:
             weighted_mu = 0  # 固定的新投资者基础倾向
         else:
-            weighted_mu = self.alpha * log_frequency  # 0.1-0.4之间
+            weighted_mu = self.alpha * log_frequency  # 0.1-0.2之间
 
         # 温和的金额权重
         weighted_mu += self.beta * investment_weight
 
-        return np.clip(weighted_mu, self.base_mu, 0.5)
+        return np.clip(weighted_mu, self.base_mu, 0.5) / 10
 
     def _calculate_investment_decision(self, potential_investor, df, grouped, current_round):
         """
@@ -393,7 +400,7 @@ class Diffusion:
             product_effect, effect_strength = self.target_score[0], self.effect_strength[0]
             investor_type = 'existing'
         else:
-            product_effect, effect_strength = self.target_score[1], self.effect_strength[1]
+            product_effect, effect_strength = self.target_score[1], self.effect_strength[1] * 1.2
             investor_type = 'new'
 
         effect_value = product_effect * effect_strength
@@ -426,7 +433,7 @@ class Diffusion:
             adjusted_prob += investment_interruption_effect
             adjusted_prob = max(0, adjusted_prob)
 
-            invest_prob += adjusted_prob * n_trials
+            invest_prob += adjusted_prob * n_trials ** ()
 
             # 进行该轮次的伯努利试验（模拟投资决策）
             round_bernoulli_results = np.random.binomial(1, adjusted_prob, n_trials)
@@ -434,7 +441,7 @@ class Diffusion:
 
         # 综合计算
         total_influence = (
-                invest_prob  +
+                invest_prob +
                 baseline_tendency +
                 effect_value
         )
@@ -489,8 +496,10 @@ class Diffusion:
                         continue
                     spread_record = records[records['对应的local_node_id'].isin(spread_nodes)]
                     grouped = spread_record.groupby('Round')
-                    final_probability, all_bernoulli_results = self._calculate_investment_decision(potential_investor, df,
-                                                                                               grouped, current_round)
+                    final_probability, all_bernoulli_results = self._calculate_investment_decision(potential_investor,
+                                                                                                   df,
+                                                                                                   grouped,
+                                                                                                   current_round)
 
                     # 修改：根据成功次数创建多条投资记录
                     if sum(all_bernoulli_results) > 0 and final_probability >= self.threshold:
@@ -524,9 +533,9 @@ class Diffusion:
                 fig_frame, ax_frame = plt.subplots(figsize=(12, 8))
                 G_frame, node_investments_frame, edge_data_frame = self._create_network_graph(df, current_round,
                                                                                               [{
-                                                                                                   '对应的local_node_id': inv}
-                                                                                               for inv in
-                                                                                               new_investors_set])
+                                                                                                  '对应的local_node_id': inv}
+                                                                                                  for inv in
+                                                                                                  new_investors_set])
                 self._plot_network(G_frame, node_investments_frame, edge_data_frame, current_round,
                                    [{'对应的local_node_id': inv} for inv in new_investors_set],
                                    fig_frame, ax_frame)
@@ -582,7 +591,7 @@ if __name__ == '__main__':
     C = [+1, +1, +1, -1, +1]
     D = [-1, -1, +1, +1, +1]
     results, target_score = compute_target_scores(A, B, C, D)
-    effect_strength = [0.01, 0.8]
+    effect_strength = [0.1, 0.8]
 
     run = Diffusion(terget, target_score=target_score, effect_strength=effect_strength, iter=15)
     run.main()
