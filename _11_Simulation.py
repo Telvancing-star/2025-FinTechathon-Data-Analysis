@@ -10,7 +10,7 @@ from collections import defaultdict
 
 
 class Diffusion:
-    def __init__(self, target, target_score, effect_strength, alpha=0.3, beta=0.05, xi=0.8, threshold=0.7,
+    def __init__(self, target, target_score, effect_strength, alpha=0.4, bta=0.05, xi=0.9, threshold=0.75,
                  iter=10):
         self.target = target  # 产品
         self.target_score = target_score
@@ -18,8 +18,8 @@ class Diffusion:
         self.iter = iter
         self.threshold = threshold
         self.a = 0.5  # 投资金额计算参数：源节点投资权重
-        self.b = 0.1  # 投资金额计算参数：邻居节点投资权重
-        self.c = 0.4  # 投资金额计算参数：平均投资权重
+        self.b = 0.3  # 投资金额计算参数：邻居节点投资权重
+        self.c = 0.2  # 投资金额计算参数：平均投资权重
         self.investment = {}
 
         with open('./data/Social/adj_neighbor.pkl', 'rb') as f:
@@ -309,11 +309,11 @@ class Diffusion:
             axes[5].scatter(
                 [r for r, below in zip(rounds, final_below_threshold) if below],
                 [p for p, below in zip(final_probs, final_below_threshold) if below],
-                alpha=0.6, color='skyblue', label=f'投资概率<{self.threshold}', s=20, marker='o'
+                alpha=0.6, color='C0', label=f'投资概率<{self.threshold}', s=20, marker='o'
             )
 
             # 绘制传播概率（invest_prob）
-            axes[5].scatter(rounds, invest_probs, alpha=0.4, color='yellow', label='传播概率', s=15, marker='^')
+            axes[5].scatter(rounds, invest_probs, alpha=0.4, color='C1', label='传播概率', s=15, marker='^')
 
             # 添加阈值线
             axes[5].axhline(y=self.threshold, color='red', linestyle='--', alpha=0.7,
@@ -434,7 +434,7 @@ class Diffusion:
 
         # 综合计算
         total_influence = (
-                invest_prob +
+                invest_prob  +
                 baseline_tendency +
                 effect_value
         )
@@ -446,7 +446,7 @@ class Diffusion:
                                    effect_value, final_probability, current_round, investor_type)
 
         # 调试信息（抽样输出，避免过多日志）
-        if np.random.random() < 0.05:  # 5%的概率输出调试信息
+        if np.random.random() < 0.01:  # 1%的概率输出调试信息
             print(f"轮次{current_round} - 节点{potential_investor}({investor_type}): "
                   f"投资概率={final_probability:.3f}, 传播概率={invest_prob:.3f}")
 
@@ -481,6 +481,7 @@ class Diffusion:
                         all_neighbors.update(self.neighbor[node])
 
                 new_investments = []
+                new_investors_set = set()  # 用于跟踪新投资者，避免重复统计
 
                 for potential_investor in all_neighbors:
                     spread_nodes = [node for node in self.neighbor[potential_investor] if node in nodes]
@@ -488,41 +489,61 @@ class Diffusion:
                         continue
                     spread_record = records[records['对应的local_node_id'].isin(spread_nodes)]
                     grouped = spread_record.groupby('Round')
-                    invest_prob, all_bernoulli_results = self._calculate_investment_decision(potential_investor, df,
-                                                                                             grouped, current_round)
+                    final_probability, all_bernoulli_results = self._calculate_investment_decision(potential_investor, df,
+                                                                                               grouped, current_round)
 
-                    if np.any(all_bernoulli_results) and invest_prob >= self.threshold:
+                    # 修改：根据成功次数创建多条投资记录
+                    if sum(all_bernoulli_results) > 0 and final_probability >= self.threshold:
                         source_node = np.random.choice(spread_record['对应的local_node_id'])
-                        new_investments.append({
-                            'Name of the Political Party': self.target,
-                            'Prefix': '/',
-                            'Round': current_round,
-                            'Denominations': self._investment(source_node),
-                            '对应的local_node_id': potential_investor,
-                            'Journal Date': '/'
-                        })
+
+                        # 为每个成功的试验创建一条投资记录
+                        for i in range(sum(all_bernoulli_results)):
+                            new_investments.append({
+                                'Name of the Political Party': self.target,
+                                'Prefix': '/',
+                                'Round': current_round,
+                                'Denominations': self._investment(source_node),
+                                '对应的local_node_id': potential_investor,
+                                'Journal Date': '/'
+                            })
+
+                        # 添加到新投资者集合（即使有多条记录，也只算一个投资者）
+                        new_investors_set.add(potential_investor)
+
+                        print(
+                            f"节点{potential_investor} 成功投资{sum(all_bernoulli_results)}次，金额: {self._investment(source_node):.2f}")
 
                 if new_investments:
                     new_rows = pd.DataFrame(new_investments)
                     df = pd.concat([df, new_rows], ignore_index=True)
 
-            frames.append((df.copy(), current_round, new_investments))
+                # 记录当前轮次的可视化数据 - 使用投资者集合而不是投资记录列表
+                frames.append((df.copy(), current_round, list(new_investors_set)))
 
-            # 保存帧图像
-            fig_frame, ax_frame = plt.subplots(figsize=(12, 8))
-            G_frame, node_investments_frame, edge_data_frame = self._create_network_graph(df, current_round,
-                                                                                          new_investments)
-            self._plot_network(G_frame, node_investments_frame, edge_data_frame, current_round, new_investments,
-                               fig_frame, ax_frame)
-            frame_filename = f'round_{current_round}.png'
-            fig_frame.savefig(os.path.join(frame_dir, frame_filename), dpi=150, bbox_inches='tight')
-            plt.close(fig_frame)
-            print(f"帧已保存: {frame_filename}")
+                # 保存帧图像 - 修改传入的参数
+                fig_frame, ax_frame = plt.subplots(figsize=(12, 8))
+                G_frame, node_investments_frame, edge_data_frame = self._create_network_graph(df, current_round,
+                                                                                              [{
+                                                                                                   '对应的local_node_id': inv}
+                                                                                               for inv in
+                                                                                               new_investors_set])
+                self._plot_network(G_frame, node_investments_frame, edge_data_frame, current_round,
+                                   [{'对应的local_node_id': inv} for inv in new_investors_set],
+                                   fig_frame, ax_frame)
+                frame_filename = f'round_{current_round}.png'
+                fig_frame.savefig(os.path.join(frame_dir, frame_filename), dpi=150, bbox_inches='tight')
+                plt.close(fig_frame)
+                print(
+                    f"帧已保存: {frame_filename}, 新增投资者: {len(new_investors_set)}人, 投资记录: {len(new_investments)}条")
 
+        # 修改动画更新函数
         def update(frame_idx):
-            df_frame, current_round, new_investments = frames[frame_idx]
-            G, node_investments, edge_data = self._create_network_graph(df_frame, current_round, new_investments)
-            self._plot_network(G, node_investments, edge_data, current_round, new_investments, fig, ax)
+            df_frame, current_round, new_investors = frames[frame_idx]
+            # 将投资者列表转换为投资记录格式
+            new_investments_formatted = [{'对应的local_node_id': inv} for inv in new_investors]
+            G, node_investments, edge_data = self._create_network_graph(df_frame, current_round,
+                                                                        new_investments_formatted)
+            self._plot_network(G, node_investments, edge_data, current_round, new_investments_formatted, fig, ax)
             return ax
 
         anim = FuncAnimation(fig, update, frames=len(frames), interval=1000, repeat=False)
@@ -537,7 +558,13 @@ class Diffusion:
         df.to_csv(output_filename, index=False, encoding='gb18030')
         print(f"模拟结果已保存到: {output_filename}")
 
-        # === 新增：执行变量分析 ===
+        # 输出统计信息
+        total_investors = df['对应的local_node_id'].nunique()
+        total_records = len(df)
+        print(
+            f"统计汇总: 总投资者{total_investors}人, 总投资记录{total_records}条, 平均每人{total_records / total_investors:.2f}次投资")
+
+        # === 执行变量分析 ===
         self._analyze_variables()
         self._plot_variable_analysis(frame_dir)
 
@@ -547,14 +574,15 @@ class Diffusion:
 
 
 if __name__ == '__main__':
-    terget = 'BHARATIYA JANATA PARTY'
-    # BHARATIYA JANATA PARTY 的权重矩阵
+    terget = 'ALL INDIA TRINAMOOL CONGRESS'
+    # ALL INDIA TRINAMOOL CONGRESS 的权重矩阵
+    # BHARATIYA JANATA PARTY 的权重矩阵BHARATIYA JANATA PARTY
     A = [+1, +1, +1, -1, -1]
     B = [+1, -1, -1, +1, -1]
     C = [+1, +1, +1, -1, +1]
     D = [-1, -1, +1, +1, +1]
     results, target_score = compute_target_scores(A, B, C, D)
-    effect_strength = [0.6, 0.4]
+    effect_strength = [0.01, 0.8]
 
     run = Diffusion(terget, target_score=target_score, effect_strength=effect_strength, iter=15)
     run.main()
