@@ -10,7 +10,7 @@ from collections import defaultdict
 
 
 class Diffusion:
-    def __init__(self, target, target_score, effect_strength, alpha=0.2, beta=0.05, xi=0.85, threshold=0.75,
+    def __init__(self, target, target_score, effect_strength, alpha=0.2, beta=0.05, xi=0.87, threshold=0.75,
                  iter=10):
         self.target = target  # 产品
         self.target_score = target_score
@@ -223,35 +223,53 @@ class Diffusion:
         data_array = np.array(data_list)
         return np.mean(data_array), np.std(data_array)
 
-    def _analyze_variables(self):
-        """分析所有变量的统计特性"""
-        print("\n" + "=" * 60)
-        print("变量统计分析报告")
-        print("=" * 60)
+    def _analyze_variables(self, output_file=None):
+        """分析所有变量的统计特性，包含仿真参数"""
+
+        output_lines = []
+
+        def add_line(text=""):
+            output_lines.append(text)
+
+        add_line("=" * 60)
+        add_line("仿真分析报告")
+        add_line("=" * 60)
+
+        # 添加仿真参数信息
+        add_line(f"目标产品: {self.target}")
+        add_line(f"衰减系数 (xi): {self.xi}")
+        add_line(f"投资阈值: {self.threshold}")
+        add_line(f"产品得分: {self.target_score}")
+        add_line(f"效果强度: {self.effect_strength}")
+        add_line(f"仿真轮次: {self.iter}")
+        add_line("")
+
+        add_line("变量统计分析")
+        add_line("-" * 40)
 
         # 整体统计
         variables = ['weighted_mu', 'invest_prob', 'baseline_tendency', 'effect', 'final_probability']
         for var in variables:
             mean_val, std_val = self._calculate_statistics(self.analysis_data[var])
-            print(
+            add_line(
                 f"{var:20} 均值: {mean_val:8.4f} 标准差: {std_val:8.4f} 变异系数: {std_val / max(mean_val, 0.001):8.4f}")
 
         # 按投资者类型分析
-        print("\n--- 按投资者类型分析 ---")
+        add_line("\n--- 按投资者类型分析 ---")
         for investor_type in ['new', 'existing']:
             indices = [i for i, t in enumerate(self.analysis_data['investor_types']) if t == investor_type]
             if indices:
-                print(f"\n{investor_type.upper()}投资者:")
+                add_line(f"\n{investor_type.upper()}投资者 (数量: {len(indices)}):")
                 for var in variables:
                     values = [self.analysis_data[var][i] for i in indices]
                     mean_val, std_val = self._calculate_statistics(values)
-                    print(f"  {var:18} 均值: {mean_val:6.4f} 标准差: {std_val:6.4f}")
+                    add_line(f"  {var:18} 均值: {mean_val:6.4f} 标准差: {std_val:6.4f}")
 
         # 按轮次分析
-        print("\n--- 按轮次趋势分析 ---")
+        add_line("\n--- 按轮次趋势分析 ---")
         rounds = sorted(set(self.analysis_data['rounds']))
         if rounds:
-            print("轮次趋势 (均值):")
+            add_line("轮次趋势 (均值):")
             for var in ['final_probability', 'invest_prob']:
                 round_means = []
                 for r in rounds:
@@ -262,11 +280,23 @@ class Diffusion:
                     else:
                         round_means.append(0)
 
-                # 计算趋势
                 if len(round_means) > 1:
                     trend = np.polyfit(range(len(round_means)), round_means, 1)[0]
                     trend_direction = "上升" if trend > 0.001 else "下降" if trend < -0.001 else "平稳"
-                    print(f"  {var:18} 趋势: {trend:7.4f} ({trend_direction})")
+                    add_line(f"  {var:18} 趋势: {trend:7.4f} ({trend_direction})")
+
+        # 输出到控制台
+        for line in output_lines:
+            print(line)
+
+        # 保存到文件
+        if output_file:
+            try:
+                with open(output_file, 'w', encoding='utf-8') as f:
+                    f.write('\n'.join(output_lines))
+                print(f"\n分析报告已保存到: {output_file}")
+            except Exception as e:
+                print(f"保存分析报告时出错: {e}")
 
     def _plot_variable_analysis(self, output_dir):
         """绘制变量分析图"""
@@ -433,7 +463,7 @@ class Diffusion:
             adjusted_prob += investment_interruption_effect
             adjusted_prob = max(0, adjusted_prob)
 
-            invest_prob += adjusted_prob * n_trials ** ()
+            invest_prob += adjusted_prob * n_trials
 
             # 进行该轮次的伯努利试验（模拟投资决策）
             round_bernoulli_results = np.random.binomial(1, adjusted_prob, n_trials)
@@ -592,6 +622,6 @@ if __name__ == '__main__':
     D = [-1, -1, +1, +1, +1]
     results, target_score = compute_target_scores(A, B, C, D)
     effect_strength = [0.1, 0.8]
-
-    run = Diffusion(terget, target_score=target_score, effect_strength=effect_strength, iter=15)
-    run.main()
+    for xi in [0.87 + _ / 1000 for _ in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]]:
+        run = Diffusion(terget, target_score=target_score, xi=xi, effect_strength=effect_strength, iter=15)
+        run.main()
