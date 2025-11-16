@@ -8,9 +8,12 @@ from _10_Party_Evaluation import compute_target_scores
 from utils.popularity_tr import Pop
 from collections import defaultdict
 
+# 设置中文字体
+plt.rcParams['font.sans-serif'] = ['SimHei', 'DejaVu Sans']  # 用来正常显示中文标签
+plt.rcParams['axes.unicode_minus'] = False  # 用来正常显示负号
 
 class Diffusion:
-    def __init__(self, target, target_score, effect_strength, alpha=0.2, beta=0.05, xi=0.87, threshold=0.75,
+    def __init__(self, target, target_score, effect_strength, alpha=0.2, beta=0.05, xi=0.8, threshold=0.7,
                  iter=10):
         self.target = target  # 产品
         self.target_score = target_score
@@ -118,20 +121,24 @@ class Diffusion:
             pos = {}
             a, b = 1.0, 0.6  # 椭圆的长短轴
 
-            # 方法1: 在椭圆内生成随机均匀分布
             i = 0
             while i < n_nodes:
-                # 在矩形区域内生成随机点
                 x = np.random.uniform(-a, a)
                 y = np.random.uniform(-b, b)
-
-                # 检查点是否在椭圆内: (x/a)^2 + (y/b)^2 <= 1
                 if (x / a) ** 2 + (y / b) ** 2 <= 1:
                     pos[all_nodes[i]] = (x, y)
                     i += 1
-
         else:
             pos = {}
+
+        # === 新增：找到连边最多的节点 ===
+        if n_nodes > 0:
+            node_degrees = dict(G.degree())
+            max_degree = max(node_degrees.values()) if node_degrees else 0
+            max_degree_nodes = [node for node, degree in node_degrees.items() if degree == max_degree]
+            hub_node = max_degree_nodes[0] if max_degree_nodes else None
+        else:
+            hub_node = None
 
         # 准备节点颜色（根据投资金额）
         node_colors = []
@@ -153,12 +160,10 @@ class Diffusion:
         new_edges = [(u, v) for u, v, style in edge_data if style == 'new']
         existing_edges = [(u, v) for u, v, style in edge_data if style != 'new']
 
-        # 绘制现有边（灰色）
         if existing_edges:
             nx.draw_networkx_edges(G, pos, edgelist=existing_edges,
                                    edge_color='gray', width=1, alpha=0.5, arrows=True, ax=ax)
 
-        # 绘制新传播边（红色高亮）
         if new_edges:
             nx.draw_networkx_edges(G, pos, edgelist=new_edges,
                                    edge_color='red', width=2, alpha=0.8, arrows=True, ax=ax)
@@ -167,19 +172,53 @@ class Diffusion:
         new_nodes = [inv['对应的local_node_id'] for inv in new_investments]
         existing_nodes = [node for node in all_nodes if node not in new_nodes]
 
-        # 为现有节点和新节点分别准备颜色
-        existing_colors = [colors[all_nodes.index(node)] for node in existing_nodes]
-        new_node_colors = ['red'] * len(new_nodes)
+        # === 修正：重新为节点准备颜色，确保长度匹配 ===
+        existing_colors = []
+        existing_nodes_to_draw = []
 
-        # 绘制现有投资者节点
-        if existing_nodes:
-            nx.draw_networkx_nodes(G, pos, nodelist=existing_nodes,
+        new_node_colors = []
+        new_nodes_to_draw = []
+
+        # 处理现有节点
+        for node in existing_nodes:
+            if node != hub_node:  # 排除中心节点
+                existing_nodes_to_draw.append(node)
+                existing_colors.append(colors[all_nodes.index(node)])
+
+        # 处理新节点
+        for node in new_nodes:
+            if node != hub_node:  # 排除中心节点
+                new_nodes_to_draw.append(node)
+                new_node_colors.append('red')
+
+        # 绘制现有投资者节点（排除中心节点）
+        if existing_nodes_to_draw:
+            nx.draw_networkx_nodes(G, pos, nodelist=existing_nodes_to_draw,
                                    node_color=existing_colors, node_size=100, alpha=0.8, ax=ax)
 
-        # 高亮新投资者节点
-        if new_nodes:
-            nx.draw_networkx_nodes(G, pos, nodelist=new_nodes,
+        # 高亮新投资者节点（排除中心节点）
+        if new_nodes_to_draw:
+            nx.draw_networkx_nodes(G, pos, nodelist=new_nodes_to_draw,
                                    node_color=new_node_colors, node_size=150, alpha=0.9, ax=ax)
+
+        # === 新增：绘制中心节点（星号） ===
+        if hub_node:
+            # 确定中心节点的颜色
+            if hub_node in new_nodes:
+                hub_color = 'red'  # 如果是新投资者，用红色
+            else:
+                hub_color = 'blue'  # 如果是现有投资者，用蓝色
+
+            # 绘制星号标记的中心节点
+            nx.draw_networkx_nodes(G, pos, nodelist=[hub_node],
+                                   node_color=hub_color, node_size=300, alpha=1.0,
+                                   node_shape='*', ax=ax)
+
+            # 添加中心节点标签
+            ax.text(pos[hub_node][0], pos[hub_node][1] + 0.15,
+                    f'中心({max_degree})',
+                    fontsize=8, ha='center', va='bottom',
+                    bbox=dict(boxstyle='round,pad=0.2', facecolor='yellow', alpha=0.7))
 
         # 设置坐标轴范围
         ax.set_xlim(-1.2, 1.2)
@@ -187,13 +226,15 @@ class Diffusion:
         ax.set_aspect('equal')
 
         # 添加标题和信息
+        hub_info = f", 中心节点: {hub_node}" if hub_node else ""
         ax.set_title(f'Investment Diffusion - Round {current_round}\n'
-                     f'Total Investors: {len(G.nodes())}, New Investors: {len(new_investments)}',
+                     f'Total Investors: {len(G.nodes())}, New Investors: {len(new_investments)}{hub_info}',
                      fontsize=12)
 
         # 图例
         legend_text = (f'● 现有投资者 (蓝色)\n'
                        f'● 新投资者 (红色)\n'
+                       f'★ 中心节点 (星号)\n'
                        f'→ 传播路径\n'
                        f'产品效应强度:\n'
                        f'  现有投资者: {self.effect_strength[0]:.3f}\n'
@@ -290,6 +331,7 @@ class Diffusion:
             print(line)
 
         # 保存到文件
+        output_file = f'./output/frames_{self.target.replace(" ", "_")}_{self.xi}/result.txt'
         if output_file:
             try:
                 with open(output_file, 'w', encoding='utf-8') as f:
@@ -469,6 +511,8 @@ class Diffusion:
             round_bernoulli_results = np.random.binomial(1, adjusted_prob, n_trials)
             all_bernoulli_results.extend(round_bernoulli_results)
 
+        invest_prob = np.clip(invest_prob, 0.01, 1)
+
         # 综合计算
         total_influence = (
                 invest_prob +
@@ -622,6 +666,6 @@ if __name__ == '__main__':
     D = [-1, -1, +1, +1, +1]
     results, target_score = compute_target_scores(A, B, C, D)
     effect_strength = [0.1, 0.8]
-    for xi in [0.87 + _ / 1000 for _ in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]]:
+    for xi in [0.8 + _ / 100 for _ in [0, 1, 2, 3, 4, 5]]:
         run = Diffusion(terget, target_score=target_score, xi=xi, effect_strength=effect_strength, iter=15)
         run.main()
