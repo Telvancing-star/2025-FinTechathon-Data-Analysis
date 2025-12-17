@@ -167,27 +167,27 @@ def create_complete_ego_network(G, circles, node_features, ego_features, ego_id,
     plt.subplot(133)
     plt.axis('off')
 
-    # 显示统计信息
-    stats_text = f"网络统计信息 - Ego {ego_id}\n\n"
-    stats_text += f"节点数量: {G.number_of_nodes()}\n"
-    stats_text += f"边数量: {G.number_of_edges()}\n"
-    stats_text += f"网络密度: {nx.density(G):.4f}\n"
-
-    if G.number_of_nodes() > 0:
-        stats_text += f"平均度: {2 * G.number_of_edges() / G.number_of_nodes():.2f}\n"
-
-    if circles:
-        stats_text += f"圈子数量: {len(circles)}\n"
-        total_circled_nodes = sum(len(members) for members in circles.values())
-        unique_circled_nodes = len(set().union(*circles.values()))
-        stats_text += f"有圈子节点: {unique_circled_nodes}/{G.number_of_nodes()}\n"
-        stats_text += f"圈子重叠度: {total_circled_nodes / unique_circled_nodes:.2f}\n"
-
-    if node_features:
-        stats_text += f"特征维度: {len(next(iter(node_features.values())))}\n"
-
-    plt.text(0.1, 0.9, stats_text, transform=plt.gca().transAxes,
-             fontfamily='monospace', verticalalignment='top')
+    # # 显示统计信息
+    # stats_text = f"网络统计信息 - Ego {ego_id}\n\n"
+    # stats_text += f"节点数量: {G.number_of_nodes()}\n"
+    # stats_text += f"边数量: {G.number_of_edges()}\n"
+    # stats_text += f"网络密度: {nx.density(G):.4f}\n"
+    #
+    # if G.number_of_nodes() > 0:
+    #     stats_text += f"平均度: {2 * G.number_of_edges() / G.number_of_nodes():.2f}\n"
+    #
+    # if circles:
+    #     stats_text += f"圈子数量: {len(circles)}\n"
+    #     total_circled_nodes = sum(len(members) for members in circles.values())
+    #     unique_circled_nodes = len(set().union(*circles.values()))
+    #     stats_text += f"有圈子节点: {unique_circled_nodes}/{G.number_of_nodes()}\n"
+    #     stats_text += f"圈子重叠度: {total_circled_nodes / unique_circled_nodes:.2f}\n"
+    #
+    # if node_features:
+    #     stats_text += f"特征维度: {len(next(iter(node_features.values())))}\n"
+    #
+    # plt.text(0.1, 0.9, stats_text, transform=plt.gca().transAxes,
+    #          fontfamily='monospace', verticalalignment='top')
 
     plt.tight_layout()
     return plt.gcf()

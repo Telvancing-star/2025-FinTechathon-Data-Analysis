@@ -39,8 +39,8 @@ class CausalEffectAnalysis:
 if __name__ == '__main__':
     analyzer = CausalEffectAnalysis()
 
-    data = pd.read_excel('./data/变异系数法结果_版2.xlsx')
-    data_sorted = data.sort_values('综合得分', ascending=False)
+    data = pd.read_excel('./data/组合赋权法结果.xlsx')
+    data_sorted = data.sort_values('综合得分_组合赋权', ascending=False)
 
     for index, row in data_sorted.head(5).iterrows():
         analyzer.get_record(row['local_node_id'], save_to_csv=True)
