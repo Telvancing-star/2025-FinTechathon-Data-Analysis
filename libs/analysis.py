@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import networkx as nx
 import matplotlib.pyplot as plt
+import os
 
 # 设置中文字体
 plt.rcParams['font.sans-serif'] = ['SimHei']
@@ -60,7 +61,7 @@ def analyze_graph_from_csv(csv_file_path):
     return G, adj_matrix
 
 
-def plot_degree_distribution(G):
+def plot_degree_distribution(G, save_path=None):
     """
     绘制度分布图
     """
@@ -84,7 +85,109 @@ def plot_degree_distribution(G):
     plt.grid(True, alpha=0.3)
 
     plt.tight_layout()
+
+    # 保存图片
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        print(f"度分布图已保存到: {save_path}")
+
     plt.show()
+
+
+def plot_network_graph(G, save_path=None):
+    """
+    绘制网络图并保存
+    """
+    plt.figure(figsize=(10, 8))
+
+    # 使用spring布局
+    pos = nx.spring_layout(G, k=1, iterations=50)
+
+    # 绘制节点和边
+    nx.draw_networkx_nodes(G, pos, node_size=50, node_color='lightblue', alpha=0.7)
+    nx.draw_networkx_edges(G, pos, alpha=0.3, edge_color='gray')
+
+    # 可选：添加节点标签（对于大图可能太密集）
+    # nx.draw_networkx_labels(G, pos, font_size=8)
+
+    plt.title(f'网络结构图\n(节点数: {G.number_of_nodes()}, 边数: {G.number_of_edges()})')
+    plt.axis('off')
+
+    # 保存图片
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        print(f"网络图已保存到: {save_path}")
+
+    plt.show()
+
+
+def plot_degree_rank(G, save_path=None):
+    """
+    绘制度排序图
+    """
+    degrees = [d for n, d in G.degree()]
+    sorted_degrees = sorted(degrees, reverse=True)
+
+    plt.figure(figsize=(10, 6))
+    plt.plot(range(1, len(sorted_degrees) + 1), sorted_degrees, 'o-', linewidth=1, markersize=3)
+    plt.xlabel('节点排序')
+    plt.ylabel('度')
+    plt.title('节点度排序图')
+    plt.grid(True, alpha=0.3)
+    plt.yscale('log')  # 可选：使用对数坐标
+    plt.xscale('log')  # 可选：使用对数坐标
+
+    # 保存图片
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        print(f"度排序图已保存到: {save_path}")
+
+    plt.show()
+
+
+def save_analysis_results(G, output_dir='./data/network_analysis'):
+    """
+    保存所有分析结果和图片
+    """
+    # 创建输出目录
+    os.makedirs(output_dir, exist_ok=True)
+    print(f"\n=== 保存分析结果到: {output_dir} ===")
+
+    # 1. 保存度分布图
+    degree_dist_path = os.path.join(output_dir, 'degree_distribution.png')
+    plot_degree_distribution(G, save_path=degree_dist_path)
+
+    # 2. 保存网络图
+    network_path = os.path.join(output_dir, 'network_graph.png')
+    plot_network_graph(G, save_path=network_path)
+
+    # 3. 保存度排序图
+    degree_rank_path = os.path.join(output_dir, 'degree_rank.png')
+    plot_degree_rank(G, save_path=degree_rank_path)
+
+    # 4. 保存基本统计信息到文本文件
+    stats_path = os.path.join(output_dir, 'network_statistics.txt')
+    with open(stats_path, 'w', encoding='utf-8') as f:
+        f.write("网络基本性质分析结果\n")
+        f.write("=" * 50 + "\n")
+        f.write(f"节点数量: {G.number_of_nodes()}\n")
+        f.write(f"边数量: {G.number_of_edges()}\n")
+
+        degrees = [d for n, d in G.degree()]
+        f.write(f"最小度: {min(degrees)}\n")
+        f.write(f"最大度: {max(degrees)}\n")
+        f.write(f"平均度: {np.mean(degrees):.2f}\n")
+        f.write(f"度标准差: {np.std(degrees):.2f}\n")
+        f.write(f"网络密度: {nx.density(G):.4f}\n")
+        f.write(f"是否连通图: {nx.is_connected(G)}\n")
+
+        if not nx.is_connected(G):
+            connected_components = list(nx.connected_components(G))
+            f.write(f"连通分量数量: {len(connected_components)}\n")
+            f.write(f"最大连通分量大小: {max(len(cc) for cc in connected_components)}\n")
+
+    print(f"统计信息已保存到: {stats_path}")
+    print("所有分析完成！")
 
 
 # 使用示例
@@ -95,5 +198,8 @@ if __name__ == "__main__":
     # 分析图
     G, adj_matrix = analyze_graph_from_csv(csv_file)
 
-    # 绘制度分布
-    plot_degree_distribution(G)
+    # 可选：单独绘制度分布图
+    # plot_degree_distribution(G)
+
+    # 保存所有分析结果和图片
+    save_analysis_results(G)

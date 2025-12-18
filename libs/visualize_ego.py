@@ -163,10 +163,10 @@ def create_complete_ego_network(G, circles, node_features, ego_features, ego_id,
         plt.text(0.5, 0.5, "无圈子数据", ha='center', va='center', transform=plt.gca().transAxes)
         plt.title("圈子分布")
 
-    # 子图3: 网络统计信息
-    plt.subplot(133)
-    plt.axis('off')
-
+    # # 子图3: 网络统计信息
+    # plt.subplot(133)
+    # plt.axis('off')
+    #
     # # 显示统计信息
     # stats_text = f"网络统计信息 - Ego {ego_id}\n\n"
     # stats_text += f"节点数量: {G.number_of_nodes()}\n"
