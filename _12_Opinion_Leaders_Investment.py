@@ -10,7 +10,7 @@ plt.rcParams['font.sans-serif'] = ['SimHei']  # 用来正常显示中文标签
 plt.rcParams['axes.unicode_minus'] = False  # 用来正常显示负号
 
 # 文件路径
-file_path = './data/merged_three_keys_with_node_id.xlsx'
+file_path = './data/Aligned Paired Data/merged_three_keys_with_node_id.xlsx'
 
 # 意见领袖节点ID
 opinion_leaders = [2630, 786, 734, 1930, 3987]

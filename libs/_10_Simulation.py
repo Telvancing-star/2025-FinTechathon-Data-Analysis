@@ -316,7 +316,7 @@ class Diffusion:
         4. 结果保存
         """
         # 加载基础数据
-        data = pd.read_csv('../data/cluster_with_rounds.csv', encoding='gb18030')
+        data = pd.read_csv('../data/Aligned Paired Data/cluster_with_rounds.csv', encoding='gb18030')
         df = data[data['Name of the Political Party'] == self.target]  # 筛选目标产品的初始投资记录
         self.oiter = max(self._get_round(df))  # 获取初始最大轮次
 

@@ -164,7 +164,7 @@ class Diffusion:
         ax.set_axis_off()
 
     def main(self):
-        data = pd.read_csv('../data/cluster_with_rounds.csv', encoding='gb18030')
+        data = pd.read_csv('../data/Aligned Paired Data/cluster_with_rounds.csv', encoding='gb18030')
         df = data[data['Name of the Political Party'] == self.target]
         self.oiter = max(self._get_round(df))
 

@@ -107,7 +107,7 @@ def get_node_neighbors_investment_auto(node_id, neighbor_file_path, investment_f
 # 使用增强版
 if __name__ == "__main__":
     neighbor_file_path = "../data/Social/adj_neighbor.pkl"
-    investment_file_path = "../data/cluster_with_rounds.csv"
+    investment_file_path = "../data/Aligned Paired Data/cluster_with_rounds.csv"
     output_dir = "./data/node_neighbors_investment"
     target_node = 0  # 替换为您的目标节点
 
