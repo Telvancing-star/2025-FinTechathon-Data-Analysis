@@ -1,4 +1,4 @@
-# 2025 Fintechathon 深圳国际金融科技大赛
+# 2025 Shenzhen Fintechathon
 
 ## 项目概述
 
