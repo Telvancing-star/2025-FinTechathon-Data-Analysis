@@ -160,16 +160,13 @@ pip install pandas numpy matplotlib networkx scikit-learn openai
 
 ## 团队成员
 
-- [团队成员1]：负责[主要工作]
-- [团队成员2]：负责[主要工作]
-- [团队成员3]：负责[主要工作]
+- 张柏尧：负责报告撰写
+- 林煜翔：负责模型构建
+- 张文聪：负责代码实现
 
 ## 联系方式
 
-- 项目邮箱：[项目邮箱]
-- 团队博客：[团队博客]
-- GitHub仓库：[GitHub仓库地址]
+- 项目邮箱：yuxianglin@stu.xjtu.edu.cn
+- GitHub仓库：https://github.com/Telvancing-star/2025-FinTechathon-Data-Analysis
 
 ---
-
-*本项目为2025 Fintechathon深圳国际金融科技大赛参赛作品*
