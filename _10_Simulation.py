@@ -658,8 +658,9 @@ class Diffusion:
 
 if __name__ == '__main__':
     terget = 'BHARATIYA JANATA PARTY'
-    # ALL INDIA TRINAMOOL CONGRESS 的权重矩阵
-    # BHARATIYA JANATA PARTY 的权重矩阵BHARATIYA JANATA PARTY
+    # ALL INDIA TRINAMOOL CONGRESS 的得分矩阵
+
+    # BHARATIYA JANATA PARTY 的得分矩阵
     A = [+1, +1, +1, +1, -1]
     B = [+1, -1, -1, +1, -1]
     C = [+1, +1, +1, -1, +1]
