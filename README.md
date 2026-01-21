@@ -160,9 +160,9 @@ pip install pandas numpy matplotlib networkx scikit-learn openai
 
 ## 团队成员
 
-- 张柏尧：负责报告撰写
-- 林煜翔：负责模型构建
-- 张文聪：负责代码实现
+- Boyao ZHANG：主要负责报告撰写
+- Yuxiang LIN：主要负责模型构建
+- Wencong ZHANG：主要负责代码实现
 
 ## 联系方式
 
