@@ -158,11 +158,6 @@ pip install pandas numpy matplotlib networkx scikit-learn openai
 4. **交互界面**：开发用户友好的交互界面，方便非技术人员使用
 5. **深度学习**：引入深度学习技术，提高特征提取和预测能力
 
-## 团队成员
-
-- Boyao ZHANG：主要负责报告撰写
-- Yuxiang LIN：主要负责模型构建
-- Wencong ZHANG：主要负责代码实现
 
 ## 联系方式
 
